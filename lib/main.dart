@@ -214,7 +214,8 @@ const Map<int, PlayerKeyMap> kPlayerMappings = {
       PadAction.coin: 0x56, // Numpad - (Exclusivo COIN / Ficha)
       PadAction.select: 0x54, // Numpad / (Select / Pausa independiente)
       PadAction.start: 0x58, // Numpad Enter (Start)
-      PadAction.extraZ: 0x63, // Numpad . (Boton extra Z para N64 / Juegos Flutter)
+      PadAction.extraZ:
+          0x63, // Numpad . (Boton extra Z para N64 / Juegos Flutter)
     },
     keyLabels: {
       PadAction.up: 'NP8',
@@ -310,15 +311,14 @@ class _GamePadScreenState extends State<GamePadScreen>
       if (_isPaused) {
         _pauseBlinkOn = true;
         _pauseBlinkTimer?.cancel();
-        _pauseBlinkTimer = Timer.periodic(
-          const Duration(milliseconds: 450),
-          (_) {
-            if (!mounted || !_isPaused) return;
-            setState(() {
-              _pauseBlinkOn = !_pauseBlinkOn;
-            });
-          },
-        );
+        _pauseBlinkTimer = Timer.periodic(const Duration(milliseconds: 450), (
+          _,
+        ) {
+          if (!mounted || !_isPaused) return;
+          setState(() {
+            _pauseBlinkOn = !_pauseBlinkOn;
+          });
+        });
       } else {
         _pauseBlinkOn = false;
         _pauseBlinkTimer?.cancel();
@@ -450,7 +450,9 @@ class _GamePadScreenState extends State<GamePadScreen>
       });
       // Envio inmediato de latencia cero (hasta 6 teclas simultaneas)
       final payload = consolidated.take(6).toList(growable: false);
-      _hidChannel.invokeMethod('sendKeys', {'keys': payload}).catchError((_) {});
+      _hidChannel
+          .invokeMethod('sendKeys', {'keys': payload})
+          .catchError((_) {});
     } else {
       setState(() {});
     }
@@ -666,7 +668,7 @@ class _GamePadScreenState extends State<GamePadScreen>
   // ===========================================================================
   void _handleDirectionalPointer(
     Offset localPosition,
-     double diameter,
+    double diameter,
     int pointerId, {
     required bool isJoystick,
   }) {
@@ -962,11 +964,7 @@ class _GamePadScreenState extends State<GamePadScreen>
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
         boxShadow: const [
-          BoxShadow(
-            color: Colors.black54,
-            blurRadius: 8,
-            offset: Offset(0, 3),
-          ),
+          BoxShadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 3)),
         ],
       ),
       child: Row(
@@ -1140,16 +1138,15 @@ class _GamePadScreenState extends State<GamePadScreen>
     List<Color> gradientColors;
 
     if (_useTopAuxAsExtraZ) {
-      borderColor = isPhysicallyPressed ? const Color(0xFFA855F7) : const Color(0xFF553C75);
+      borderColor = isPhysicallyPressed
+          ? const Color(0xFFA855F7)
+          : const Color(0xFF553C75);
       gradientColors = isPhysicallyPressed
           ? [
               const Color(0xFFA855F7).withValues(alpha: 0.50),
               const Color(0xFFA855F7).withValues(alpha: 0.25),
             ]
-          : const [
-              Color(0xFF382946),
-              Color(0xFF281E32),
-            ];
+          : const [Color(0xFF382946), Color(0xFF281E32)];
     } else if (isPauseActive) {
       final glowColor = _pauseBlinkOn ? pauseRed : const Color(0xFF7F1D1D);
       borderColor = glowColor;
@@ -1158,21 +1155,12 @@ class _GamePadScreenState extends State<GamePadScreen>
               pauseRed.withValues(alpha: 0.60),
               const Color(0xFF991B1B).withValues(alpha: 0.40),
             ]
-          : const [
-              Color(0xFF3B1D22),
-              Color(0xFF221316),
-            ];
+          : const [Color(0xFF3B1D22), Color(0xFF221316)];
     } else {
       borderColor = isPhysicallyPressed ? accent : const Color(0xFF45454E);
       gradientColors = isPhysicallyPressed
-          ? [
-              accent.withValues(alpha: 0.42),
-              accent.withValues(alpha: 0.22),
-            ]
-          : const [
-              Color(0xFF35353C),
-              Color(0xFF27272C),
-            ];
+          ? [accent.withValues(alpha: 0.42), accent.withValues(alpha: 0.22)]
+          : const [Color(0xFF35353C), Color(0xFF27272C)];
     }
 
     return Listener(
@@ -1262,13 +1250,15 @@ class _GamePadScreenState extends State<GamePadScreen>
                   Icon(
                     _useTopAuxAsExtraZ
                         ? Icons.bolt_rounded
-                        : (isPauseActive ? Icons.pause_circle_filled : Icons.pause_rounded),
+                        : (isPauseActive
+                              ? Icons.pause_circle_filled
+                              : Icons.pause_rounded),
                     size: height * 0.38,
                     color: _useTopAuxAsExtraZ
                         ? const Color(0xFFD8B4FE)
                         : (isPauseActive
-                            ? (_pauseBlinkOn ? Colors.white : pauseRed)
-                            : Colors.white70),
+                              ? (_pauseBlinkOn ? Colors.white : pauseRed)
+                              : Colors.white70),
                   ),
                   const SizedBox(width: 4),
                   Column(
@@ -1284,8 +1274,8 @@ class _GamePadScreenState extends State<GamePadScreen>
                           color: _useTopAuxAsExtraZ
                               ? Colors.white
                               : (isPauseActive
-                                  ? (_pauseBlinkOn ? Colors.white : pauseRed)
-                                  : Colors.white),
+                                    ? (_pauseBlinkOn ? Colors.white : pauseRed)
+                                    : Colors.white),
                           letterSpacing: 0.5,
                           height: 1.05,
                         ),
@@ -1294,8 +1284,8 @@ class _GamePadScreenState extends State<GamePadScreen>
                         _useTopAuxAsExtraZ
                             ? 'BOTON EXTRA'
                             : (isPauseActive
-                                ? (_pauseBlinkOn ? 'EN PAUSA' : 'SELECT')
-                                : 'SELECT (PAUSA)'),
+                                  ? (_pauseBlinkOn ? 'EN PAUSA' : 'SELECT')
+                                  : 'SELECT (PAUSA)'),
                         style: TextStyle(
                           fontSize: (height * 0.16).clamp(7.5, 10.0),
                           fontWeight: FontWeight.w700,
@@ -1333,9 +1323,7 @@ class _GamePadScreenState extends State<GamePadScreen>
           vertical: 5,
         ),
         decoration: BoxDecoration(
-          color: selected
-              ? accent.withValues(alpha: 0.24)
-              : Colors.transparent,
+          color: selected ? accent.withValues(alpha: 0.24) : Colors.transparent,
           borderRadius: BorderRadius.circular(7),
           border: Border.all(
             color: selected ? accent : Colors.transparent,
@@ -1440,21 +1428,12 @@ class _GamePadScreenState extends State<GamePadScreen>
               pauseRed.withValues(alpha: 0.60),
               const Color(0xFF991B1B).withValues(alpha: 0.40),
             ]
-          : const [
-              Color(0xFF3B1D22),
-              Color(0xFF221316),
-            ];
+          : const [Color(0xFF3B1D22), Color(0xFF221316)];
     } else {
       borderColor = isPressed ? accent : const Color(0xFF45454E);
       gradientColors = isPressed
-          ? [
-              accent.withValues(alpha: 0.42),
-              accent.withValues(alpha: 0.22),
-            ]
-          : const [
-              Color(0xFF35353C),
-              Color(0xFF27272C),
-            ];
+          ? [accent.withValues(alpha: 0.42), accent.withValues(alpha: 0.22)]
+          : const [Color(0xFF35353C), Color(0xFF27272C)];
     }
 
     final displayLabel = (isBlinkingPause && _pauseBlinkOn) ? 'PAUSA' : label;
@@ -1474,7 +1453,9 @@ class _GamePadScreenState extends State<GamePadScreen>
             e.localPosition.dx <= width + 12 &&
             e.localPosition.dy >= -12 &&
             e.localPosition.dy <= height + 12) {
-          _buttonActivePointers.putIfAbsent(effectiveId, () => {}).add(e.pointer);
+          _buttonActivePointers
+              .putIfAbsent(effectiveId, () => {})
+              .add(e.pointer);
           _updatePointerKeys(e.pointer, {usageCode}, haptic: false);
         } else {
           _buttonActivePointers[effectiveId]?.remove(e.pointer);
@@ -1556,8 +1537,8 @@ class _GamePadScreenState extends State<GamePadScreen>
                         color: isBlinkingPause
                             ? (_pauseBlinkOn ? Colors.white : pauseRed)
                             : (isPressed
-                                ? Colors.white
-                                : const Color(0xFFE4E4EC)),
+                                  ? Colors.white
+                                  : const Color(0xFFE4E4EC)),
                         letterSpacing: 0.5,
                         height: 1.05,
                       ),
@@ -1973,10 +1954,7 @@ class _GamePadScreenState extends State<GamePadScreen>
                       gradient: const LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
-                        colors: [
-                          Color(0xFF1D1D22),
-                          Color(0xFF2F2F37),
-                        ],
+                        colors: [Color(0xFF1D1D22), Color(0xFF2F2F37)],
                       ),
                       border: Border.all(
                         color: Colors.white.withValues(alpha: 0.08),
@@ -2116,10 +2094,7 @@ class _GamePadScreenState extends State<GamePadScreen>
                     accent.withValues(alpha: 0.48),
                     accent.withValues(alpha: 0.24),
                   ]
-                : const [
-                    Color(0xFF36363E),
-                    Color(0xFF28282E),
-                  ],
+                : const [Color(0xFF36363E), Color(0xFF28282E)],
           ),
           borderRadius: BorderRadius.circular(size * 0.22),
           border: Border.all(
@@ -2225,10 +2200,7 @@ class _CircularDPadPainter extends CustomPainter {
                   accentColor.withValues(alpha: 0.50),
                   accentColor.withValues(alpha: 0.22),
                 ]
-              : const [
-                  Color(0xFF37373F),
-                  Color(0xFF28282E),
-                ],
+              : const [Color(0xFF37373F), Color(0xFF28282E)],
         ).createShader(sectorRect)
         ..style = PaintingStyle.fill;
 
@@ -2271,10 +2243,7 @@ class _CircularDPadPainter extends CustomPainter {
       ..shader = const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [
-          Color(0xFF1C1C21),
-          Color(0xFF2B2B33),
-        ],
+        colors: [Color(0xFF1C1C21), Color(0xFF2B2B33)],
       ).createShader(Rect.fromCircle(center: center, radius: innerRadius));
     canvas.drawCircle(center, innerRadius, centerCirclePaint);
 
