@@ -73,7 +73,7 @@ class PlayerKeyMap {
   String labelFor(PadAction action) => keyLabels[action] ?? '';
 }
 
-/// Mapeo Multimando P1 a P4 (sin colisiones entre jugadores y con COIN separado de SELECT)
+/// Mapeo Multimando P1 a P4 (sin colisiones entre jugadores, con codigos HID unicos por jugador)
 const Map<int, PlayerKeyMap> kPlayerMappings = {
   1: PlayerKeyMap(
     playerNumber: 1,
@@ -91,10 +91,10 @@ const Map<int, PlayerKeyMap> kPlayerMappings = {
       PadAction.rb: 0x08, // E
       PadAction.lt: 0x1E, // 1
       PadAction.rt: 0x1F, // 2
-      PadAction.coin: 0x22, // 5 (Exclusivo COIN / Ficha)
-      PadAction.select: 0x2A, // Backspace (Select / Pausa independiente)
-      PadAction.start: 0x28, // Enter (Start)
-      PadAction.extraZ: 0x2E, // = (Boton extra Z para N64 / Juegos Flutter)
+      PadAction.coin: 0x22, // 5 (Coin P1)
+      PadAction.select: 0x22, // 5 (Select / Coin P1)
+      PadAction.start: 0x28, // Enter (Start P1)
+      PadAction.extraZ: 0x2E, // = (Boton extra GP_X7 P1)
     },
     keyLabels: {
       PadAction.up: 'W',
@@ -110,8 +110,8 @@ const Map<int, PlayerKeyMap> kPlayerMappings = {
       PadAction.lt: '1',
       PadAction.rt: '2',
       PadAction.coin: '5',
-      PadAction.select: 'SEL',
-      PadAction.start: 'START',
+      PadAction.select: '5',
+      PadAction.start: 'ENT',
       PadAction.extraZ: 'GP_X7',
     },
   ),
@@ -131,10 +131,10 @@ const Map<int, PlayerKeyMap> kPlayerMappings = {
       PadAction.rb: 0x11, // N
       PadAction.lt: 0x20, // 3
       PadAction.rt: 0x21, // 4
-      PadAction.coin: 0x23, // 6 (Exclusivo COIN / Ficha)
-      PadAction.select: 0x2B, // Tab (Select / Pausa independiente)
-      PadAction.start: 0x2C, // Espacio (Start)
-      PadAction.extraZ: 0x2F, // [ (Boton extra Z para N64 / Juegos Flutter)
+      PadAction.coin: 0x23, // 6 (Coin P2)
+      PadAction.select: 0x23, // 6 (Select / Coin P2)
+      PadAction.start: 0x2C, // Espacio (Start P2)
+      PadAction.extraZ: 0x2F, // [ (Boton extra GP_X7 P2)
     },
     keyLabels: {
       PadAction.up: '↑',
@@ -150,8 +150,8 @@ const Map<int, PlayerKeyMap> kPlayerMappings = {
       PadAction.lt: '3',
       PadAction.rt: '4',
       PadAction.coin: '6',
-      PadAction.select: 'SEL',
-      PadAction.start: 'START',
+      PadAction.select: '6',
+      PadAction.start: 'SPC',
       PadAction.extraZ: 'GP_X7',
     },
   ),
@@ -171,10 +171,10 @@ const Map<int, PlayerKeyMap> kPlayerMappings = {
       PadAction.rb: 0x10, // M
       PadAction.lt: 0x24, // 7
       PadAction.rt: 0x25, // 8
-      PadAction.coin: 0x26, // 9 (Exclusivo COIN / Ficha)
-      PadAction.select: 0x2D, // - (Select / Pausa independiente)
-      PadAction.start: 0x27, // 0 (Start)
-      PadAction.extraZ: 0x30, // ] (Boton extra Z para N64 / Juegos Flutter)
+      PadAction.coin: 0x26, // 9 (Coin P3)
+      PadAction.select: 0x26, // 9 (Select / Coin P3)
+      PadAction.start: 0x27, // 0 (Start P3)
+      PadAction.extraZ: 0x30, // ] (Boton extra GP_X7 P3)
     },
     keyLabels: {
       PadAction.up: 'T',
@@ -190,8 +190,8 @@ const Map<int, PlayerKeyMap> kPlayerMappings = {
       PadAction.lt: '7',
       PadAction.rt: '8',
       PadAction.coin: '9',
-      PadAction.select: 'SEL',
-      PadAction.start: 'START',
+      PadAction.select: '9',
+      PadAction.start: '0',
       PadAction.extraZ: 'GP_X7',
     },
   ),
@@ -211,11 +211,10 @@ const Map<int, PlayerKeyMap> kPlayerMappings = {
       PadAction.rb: 0x61, // Numpad 9
       PadAction.lt: 0x55, // Numpad *
       PadAction.rt: 0x57, // Numpad +
-      PadAction.coin: 0x56, // Numpad - (Exclusivo COIN / Ficha)
-      PadAction.select: 0x54, // Numpad / (Select / Pausa independiente)
-      PadAction.start: 0x58, // Numpad Enter (Start)
-      PadAction.extraZ:
-          0x63, // Numpad . (Boton extra Z para N64 / Juegos Flutter)
+      PadAction.coin: 0x56, // Numpad - (Coin P4)
+      PadAction.select: 0x56, // Numpad - (Select / Coin P4)
+      PadAction.start: 0x58, // Numpad Enter (Start P4)
+      PadAction.extraZ: 0x63, // Numpad . (Boton extra GP_X7 P4)
     },
     keyLabels: {
       PadAction.up: 'NP8',
@@ -231,8 +230,8 @@ const Map<int, PlayerKeyMap> kPlayerMappings = {
       PadAction.lt: 'NP*',
       PadAction.rt: 'NP+',
       PadAction.coin: 'NP-',
-      PadAction.select: 'SEL',
-      PadAction.start: 'START',
+      PadAction.select: 'NP-',
+      PadAction.start: 'NPE',
       PadAction.extraZ: 'GP_X7',
     },
   ),
