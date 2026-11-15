@@ -112,7 +112,7 @@ const Map<int, PlayerKeyMap> kPlayerMappings = {
       PadAction.coin: '5',
       PadAction.select: 'SEL',
       PadAction.start: 'START',
-      PadAction.extraZ: 'Z-N64',
+      PadAction.extraZ: 'GP_X7',
     },
   ),
   2: PlayerKeyMap(
@@ -152,7 +152,7 @@ const Map<int, PlayerKeyMap> kPlayerMappings = {
       PadAction.coin: '6',
       PadAction.select: 'SEL',
       PadAction.start: 'START',
-      PadAction.extraZ: 'Z-N64',
+      PadAction.extraZ: 'GP_X7',
     },
   ),
   3: PlayerKeyMap(
@@ -192,7 +192,7 @@ const Map<int, PlayerKeyMap> kPlayerMappings = {
       PadAction.coin: '9',
       PadAction.select: 'SEL',
       PadAction.start: 'START',
-      PadAction.extraZ: 'Z-N64',
+      PadAction.extraZ: 'GP_X7',
     },
   ),
   4: PlayerKeyMap(
@@ -232,7 +232,7 @@ const Map<int, PlayerKeyMap> kPlayerMappings = {
       PadAction.coin: 'NP-',
       PadAction.select: 'SEL',
       PadAction.start: 'START',
-      PadAction.extraZ: 'Z-N64',
+      PadAction.extraZ: 'GP_X7',
     },
   ),
 };
@@ -1276,7 +1276,7 @@ class _GamePadScreenState extends State<GamePadScreen>
                     children: [
                       Text(
                         _useTopAuxAsExtraZ
-                            ? 'Z-N64'
+                            ? 'GP_X7'
                             : (isPauseActive ? 'PAUSA' : 'PAUSE'),
                         style: TextStyle(
                           fontSize: (height * 0.28).clamp(10.0, 15.0),
@@ -1647,6 +1647,18 @@ class _GamePadScreenState extends State<GamePadScreen>
                 ),
               ],
             ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        // Texto de autor / creditos abajo del boton MODO
+        const Text(
+          'EduPlays By Prof. Luis Choque',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 9.5,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF9E9E9E),
+            letterSpacing: 0.3,
           ),
         ),
       ],
