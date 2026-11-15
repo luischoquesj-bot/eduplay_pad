@@ -91,8 +91,8 @@ const Map<int, PlayerKeyMap> kPlayerMappings = {
       PadAction.rb: 0x08, // E
       PadAction.lt: 0x1E, // 1
       PadAction.rt: 0x1F, // 2
-      PadAction.coin: 0x22, // 5 (Coin P1)
-      PadAction.select: 0x22, // 5 (Select / Coin P1)
+      PadAction.coin: 0x2A, // Backspace (Codigo propio independiente COIN P1)
+      PadAction.select: 0x22, // 5 (Select P1)
       PadAction.start: 0x28, // Enter (Start P1)
       PadAction.extraZ: 0x2E, // = (Boton extra GP_X7 P1)
     },
@@ -109,7 +109,7 @@ const Map<int, PlayerKeyMap> kPlayerMappings = {
       PadAction.rb: 'E',
       PadAction.lt: '1',
       PadAction.rt: '2',
-      PadAction.coin: '5',
+      PadAction.coin: 'BKSP',
       PadAction.select: '5',
       PadAction.start: 'ENT',
       PadAction.extraZ: 'GP_X7',
@@ -131,8 +131,8 @@ const Map<int, PlayerKeyMap> kPlayerMappings = {
       PadAction.rb: 0x11, // N
       PadAction.lt: 0x20, // 3
       PadAction.rt: 0x21, // 4
-      PadAction.coin: 0x23, // 6 (Coin P2)
-      PadAction.select: 0x23, // 6 (Select / Coin P2)
+      PadAction.coin: 0x2B, // Tab (Codigo propio independiente COIN P2)
+      PadAction.select: 0x23, // 6 (Select P2)
       PadAction.start: 0x2C, // Espacio (Start P2)
       PadAction.extraZ: 0x2F, // [ (Boton extra GP_X7 P2)
     },
@@ -149,7 +149,7 @@ const Map<int, PlayerKeyMap> kPlayerMappings = {
       PadAction.rb: 'N',
       PadAction.lt: '3',
       PadAction.rt: '4',
-      PadAction.coin: '6',
+      PadAction.coin: 'TAB',
       PadAction.select: '6',
       PadAction.start: 'SPC',
       PadAction.extraZ: 'GP_X7',
@@ -171,8 +171,8 @@ const Map<int, PlayerKeyMap> kPlayerMappings = {
       PadAction.rb: 0x10, // M
       PadAction.lt: 0x24, // 7
       PadAction.rt: 0x25, // 8
-      PadAction.coin: 0x26, // 9 (Coin P3)
-      PadAction.select: 0x26, // 9 (Select / Coin P3)
+      PadAction.coin: 0x2D, // - (Codigo propio independiente COIN P3)
+      PadAction.select: 0x26, // 9 (Select P3)
       PadAction.start: 0x27, // 0 (Start P3)
       PadAction.extraZ: 0x30, // ] (Boton extra GP_X7 P3)
     },
@@ -189,7 +189,7 @@ const Map<int, PlayerKeyMap> kPlayerMappings = {
       PadAction.rb: 'M',
       PadAction.lt: '7',
       PadAction.rt: '8',
-      PadAction.coin: '9',
+      PadAction.coin: '-',
       PadAction.select: '9',
       PadAction.start: '0',
       PadAction.extraZ: 'GP_X7',
@@ -211,8 +211,8 @@ const Map<int, PlayerKeyMap> kPlayerMappings = {
       PadAction.rb: 0x61, // Numpad 9
       PadAction.lt: 0x55, // Numpad *
       PadAction.rt: 0x57, // Numpad +
-      PadAction.coin: 0x56, // Numpad - (Coin P4)
-      PadAction.select: 0x56, // Numpad - (Select / Coin P4)
+      PadAction.coin: 0x54, // Numpad / (Codigo propio independiente COIN P4)
+      PadAction.select: 0x56, // Numpad - (Select P4)
       PadAction.start: 0x58, // Numpad Enter (Start P4)
       PadAction.extraZ: 0x63, // Numpad . (Boton extra GP_X7 P4)
     },
@@ -229,7 +229,7 @@ const Map<int, PlayerKeyMap> kPlayerMappings = {
       PadAction.rb: 'NP9',
       PadAction.lt: 'NP*',
       PadAction.rt: 'NP+',
-      PadAction.coin: 'NP-',
+      PadAction.coin: 'NP/',
       PadAction.select: 'NP-',
       PadAction.start: 'NPE',
       PadAction.extraZ: 'GP_X7',
@@ -969,155 +969,168 @@ class _GamePadScreenState extends State<GamePadScreen>
       child: FittedBox(
         fit: BoxFit.scaleDown,
         alignment: Alignment.center,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            // 1. Selector segmentado P1 | P2 | P3 | P4
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: List.generate(4, (index) {
-                final p = index + 1;
-                final isSelected = _selectedPlayer == p;
-                final pColor = kPlayerMappings[p]!.accentColor;
-                return Listener(
-                  onPointerDown: (_) => _switchPlayer(p),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 120),
-                    margin: const EdgeInsets.symmetric(horizontal: 2.5),
-                    padding: EdgeInsets.symmetric(
-                      horizontal: compact ? 9 : 13,
-                      vertical: barH * 0.14,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? pColor.withValues(alpha: 0.22)
-                          : const Color(0xFF2A2A30),
-                      borderRadius: BorderRadius.circular(9),
-                      border: Border.all(
-                        color: isSelected ? pColor : Colors.white12,
-                        width: 1.4,
-                      ),
-                    ),
-                    child: Text(
-                      'P$p',
-                      style: TextStyle(
-                        color: isSelected ? pColor : Colors.white60,
-                        fontWeight: FontWeight.w800,
-                        fontSize: compact ? 11.5 : 13,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
-                );
-              }),
-            ),
-
-            // 2. Interruptor Toggle D-PAD / JOYSTICK para el lado izquierdo
-            Container(
-              padding: const EdgeInsets.all(3),
-              decoration: BoxDecoration(
-                color: const Color(0xFF16161A),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.white12),
-              ),
-              child: Row(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minWidth: screenW * 0.93),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // 1. Selector segmentado P1 | P2 | P3 | P4
+              Row(
                 mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildModeToggleChip(
-                    label: 'D-PAD',
-                    icon: Icons.gamepad_outlined,
-                    selected: _leftMode == LeftControlMode.dpad,
-                    accent: accent,
-                    compact: compact,
-                    onTap: () => _toggleLeftMode(LeftControlMode.dpad),
-                  ),
-                  const SizedBox(width: 4),
-                  _buildModeToggleChip(
-                    label: 'JOYSTICK',
-                    icon: Icons.radio_button_checked,
-                    selected: _leftMode == LeftControlMode.joystick,
-                    accent: accent,
-                    compact: compact,
-                    onTap: () => _toggleLeftMode(LeftControlMode.joystick),
-                  ),
-                ],
+                children: List.generate(4, (index) {
+                  final p = index + 1;
+                  final isSelected = _selectedPlayer == p;
+                  final pColor = kPlayerMappings[p]!.accentColor;
+                  return Listener(
+                    onPointerDown: (_) => _switchPlayer(p),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 120),
+                      margin: const EdgeInsets.symmetric(horizontal: 2.5),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: compact ? 9 : 13,
+                        vertical: barH * 0.14,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? pColor.withValues(alpha: 0.22)
+                            : const Color(0xFF2A2A30),
+                        borderRadius: BorderRadius.circular(9),
+                        border: Border.all(
+                          color: isSelected ? pColor : Colors.white12,
+                          width: 1.4,
+                        ),
+                      ),
+                      child: Text(
+                        'P$p',
+                        style: TextStyle(
+                          color: isSelected ? pColor : Colors.white60,
+                          fontWeight: FontWeight.w800,
+                          fontSize: compact ? 11.5 : 13,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  );
+                }),
               ),
-            ),
 
-            // 3. Botones superiores independientes: COIN + SELECT (con opcion de Z-N64 o indicador EN PAUSA parpadeante)
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildHoldButton(
-                  buttonId: 'top_coin',
-                  action: PadAction.coin,
-                  label: 'COIN',
-                  subLabel: _currentMap.labelFor(PadAction.coin),
-                  width: compact ? 68 : 84,
-                  height: barH * 0.68,
-                  borderRadius: 9,
-                  icon: Icons.monetization_on_outlined,
-                ),
-                const SizedBox(width: 8),
-                _buildTopSelectPauseOrExtraButton(
-                  width: compact ? 82 : 106,
-                  height: barH * 0.68,
-                ),
-              ],
-            ),
+              SizedBox(width: screenW * 0.025),
 
-            // 4. Boton de Estado Bluetooth (activar visibilidad / reconectar)
-            Listener(
-              onPointerDown: (_) => _showBluetoothDialog(),
-              child: Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: compact ? 9 : 12,
-                  vertical: barH * 0.14,
-                ),
+              // 2. Interruptor Toggle D-PAD / JOYSTICK para el lado izquierdo
+              Container(
+                padding: const EdgeInsets.all(3),
                 decoration: BoxDecoration(
-                  color: _connectedDeviceName != null
-                      ? const Color(0xFF143824)
-                      : const Color(0xFF2B2B32),
+                  color: const Color(0xFF16161A),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: _connectedDeviceName != null
-                        ? const Color(0xFF4ADE80)
-                        : Colors.white24,
-                    width: 1.2,
-                  ),
+                  border: Border.all(color: Colors.white12),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      _connectedDeviceName != null
-                          ? Icons.bluetooth_connected
-                          : Icons.bluetooth,
-                      size: compact ? 15 : 17,
-                      color: _connectedDeviceName != null
-                          ? const Color(0xFF4ADE80)
-                          : accent,
+                    _buildModeToggleChip(
+                      label: 'D-PAD',
+                      icon: Icons.gamepad_outlined,
+                      selected: _leftMode == LeftControlMode.dpad,
+                      accent: accent,
+                      compact: compact,
+                      onTap: () => _toggleLeftMode(LeftControlMode.dpad),
                     ),
-                    const SizedBox(width: 5),
-                    ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: screenW * 0.13),
-                      child: Text(
-                        _connectedDeviceName ?? 'BT HID',
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: compact ? 11 : 12,
-                          fontWeight: FontWeight.w700,
-                          color: _connectedDeviceName != null
-                              ? const Color(0xFF4ADE80)
-                              : Colors.white70,
-                        ),
-                      ),
+                    const SizedBox(width: 4),
+                    _buildModeToggleChip(
+                      label: 'JOYSTICK',
+                      icon: Icons.radio_button_checked,
+                      selected: _leftMode == LeftControlMode.joystick,
+                      accent: accent,
+                      compact: compact,
+                      onTap: () => _toggleLeftMode(LeftControlMode.joystick),
                     ),
                   ],
                 ),
               ),
-            ),
-          ],
+
+              SizedBox(width: screenW * 0.025),
+
+              // 3. Botones superiores independientes: COIN + SELECT (con opcion de GP_X7 o indicador EN PAUSA parpadeante)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildHoldButton(
+                    buttonId: 'top_coin',
+                    action: PadAction.coin,
+                    label: 'COIN',
+                    subLabel: _currentMap.labelFor(PadAction.coin),
+                    width: compact ? 68 : 84,
+                    height: barH * 0.68,
+                    borderRadius: 9,
+                    icon: Icons.monetization_on_outlined,
+                  ),
+                  SizedBox(width: screenW * 0.012),
+                  _buildTopSelectPauseOrExtraButton(
+                    width: compact ? 82 : 106,
+                    height: barH * 0.68,
+                  ),
+                ],
+              ),
+
+              // Separacion responsiva en porcentaje entre PAUSE y BT HID, moviendo BT HID ligeramente a la derecha
+              SizedBox(width: screenW * 0.045),
+
+              // 4. Boton de Estado Bluetooth (activar visibilidad / reconectar)
+              Padding(
+                padding: EdgeInsets.only(right: screenW * 0.008),
+                child: Listener(
+                  onPointerDown: (_) => _showBluetoothDialog(),
+                  child: Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: compact ? 9 : 12,
+                      vertical: barH * 0.14,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _connectedDeviceName != null
+                          ? const Color(0xFF143824)
+                          : const Color(0xFF2B2B32),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: _connectedDeviceName != null
+                            ? const Color(0xFF4ADE80)
+                            : Colors.white24,
+                        width: 1.2,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _connectedDeviceName != null
+                              ? Icons.bluetooth_connected
+                              : Icons.bluetooth,
+                          size: compact ? 15 : 17,
+                          color: _connectedDeviceName != null
+                              ? const Color(0xFF4ADE80)
+                              : accent,
+                        ),
+                        const SizedBox(width: 5),
+                        ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: screenW * 0.13),
+                          child: Text(
+                            _connectedDeviceName ?? 'BT HID',
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: compact ? 11 : 12,
+                              fontWeight: FontWeight.w700,
+                              color: _connectedDeviceName != null
+                                  ? const Color(0xFF4ADE80)
+                                  : Colors.white70,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1265,12 +1278,16 @@ class _GamePadScreenState extends State<GamePadScreen>
                   ),
                   const SizedBox(width: 4),
                   Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         _useTopAuxAsExtraZ
                             ? 'GP_X7'
-                            : (isPauseActive ? 'PAUSA' : 'PAUSE'),
+                            : (isPauseActive
+                                  ? (_pauseBlinkOn ? 'EN  PAUSA' : 'PAUSE')
+                                  : 'PAUSE'),
+                        textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: (height * 0.28).clamp(10.0, 15.0),
                           fontWeight: FontWeight.w800,
@@ -1279,25 +1296,24 @@ class _GamePadScreenState extends State<GamePadScreen>
                               : (isPauseActive
                                     ? (_pauseBlinkOn ? Colors.white : pauseRed)
                                     : Colors.white),
-                          letterSpacing: 0.5,
+                          letterSpacing: (isPauseActive && _pauseBlinkOn)
+                              ? 1.0
+                              : 0.5,
                           height: 1.05,
                         ),
                       ),
-                      Text(
-                        _useTopAuxAsExtraZ
-                            ? 'BOTON EXTRA'
-                            : (isPauseActive
-                                  ? (_pauseBlinkOn ? 'EN PAUSA' : 'SELECT')
-                                  : 'SELECT (PAUSA)'),
-                        style: TextStyle(
-                          fontSize: (height * 0.16).clamp(7.5, 10.0),
-                          fontWeight: FontWeight.w700,
-                          color: isPauseActive
-                              ? (_pauseBlinkOn ? Colors.white : pauseRed)
-                              : Colors.white54,
-                          height: 1.05,
+                      if (!isPauseActive || !_pauseBlinkOn)
+                        Text(
+                          _useTopAuxAsExtraZ
+                              ? 'BOTON EXTRA'
+                              : (isPauseActive ? 'SELECT' : 'SELECT (PAUSA)'),
+                          style: TextStyle(
+                            fontSize: (height * 0.16).clamp(7.5, 10.0),
+                            fontWeight: FontWeight.w700,
+                            color: isPauseActive ? pauseRed : Colors.white54,
+                            height: 1.05,
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ],
@@ -1413,7 +1429,9 @@ class _GamePadScreenState extends State<GamePadScreen>
     final effectiveId = buttonId ?? 'btn_${action.name}';
     final isPhysicallyPressed =
         (_buttonActivePointers[effectiveId]?.isNotEmpty ?? false);
-    final isPressed = isPhysicallyPressed || _isActionActive(action);
+    final isPressed = isPhysicallyPressed;
+    final isCenterButton =
+        effectiveId == 'center_select' || effectiveId == 'center_start';
     final accent = _currentMap.accentColor;
     final usageCode = _currentMap.codeFor(action);
 
@@ -1439,9 +1457,11 @@ class _GamePadScreenState extends State<GamePadScreen>
           : const [Color(0xFF35353C), Color(0xFF27272C)];
     }
 
-    final displayLabel = (isBlinkingPause && _pauseBlinkOn) ? 'PAUSA' : label;
+    final displayLabel = (isBlinkingPause && _pauseBlinkOn)
+        ? 'EN  PAUSA'
+        : label;
     final displaySubLabel = (isBlinkingPause && _pauseBlinkOn)
-        ? 'EN PAUSA'
+        ? ''
         : (isBlinkingPause ? 'PAUSA' : subLabel);
 
     return Listener(
@@ -1511,58 +1531,104 @@ class _GamePadScreenState extends State<GamePadScreen>
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (icon != null) ...[
-                  Icon(
-                    (isBlinkingPause && _pauseBlinkOn)
-                        ? Icons.pause_circle_filled
-                        : icon,
-                    size: height * 0.34,
-                    color: isBlinkingPause
-                        ? (_pauseBlinkOn ? Colors.white : pauseRed)
-                        : (isPressed ? Colors.white : const Color(0xFFD4D4DC)),
-                  ),
-                  const SizedBox(width: 4),
-                ],
-                Column(
+          child: isCenterButton
+              ? Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      displayLabel,
-                      style: TextStyle(
-                        fontSize: (height * 0.29).clamp(10.5, 19.0),
-                        fontWeight: FontWeight.w800,
-                        color: isBlinkingPause
-                            ? (_pauseBlinkOn ? Colors.white : pauseRed)
-                            : (isPressed
-                                  ? Colors.white
-                                  : const Color(0xFFE4E4EC)),
-                        letterSpacing: 0.5,
-                        height: 1.05,
+                    SizedBox(
+                      width: width - 10,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          displayLabel,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: (height * 0.22).clamp(9.5, 13.5),
+                            fontWeight: FontWeight.w800,
+                            color: isBlinkingPause
+                                ? (_pauseBlinkOn ? Colors.white : pauseRed)
+                                : (isPressed
+                                      ? Colors.white
+                                      : const Color(0xFFE4E4EC)),
+                            letterSpacing: (isBlinkingPause && _pauseBlinkOn)
+                                ? 1.0
+                                : 0.5,
+                            height: 1.05,
+                          ),
+                        ),
                       ),
                     ),
-                    if (displaySubLabel.isNotEmpty && height >= 44)
+                    if (displaySubLabel.isNotEmpty && height >= 44) ...[
+                      SizedBox(height: height * 0.08),
                       Text(
                         displaySubLabel,
                         style: TextStyle(
-                          fontSize: (height * 0.16).clamp(8.0, 10.5),
-                          fontWeight: FontWeight.w600,
+                          fontSize: (height * 0.19).clamp(9.5, 12.0),
+                          fontWeight: FontWeight.w700,
                           color: isBlinkingPause
                               ? (_pauseBlinkOn ? Colors.white : pauseRed)
                               : (isPressed ? accent : Colors.white38),
                           height: 1.05,
                         ),
                       ),
+                    ],
                   ],
+                )
+              : FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (icon != null) ...[
+                        Icon(
+                          (isBlinkingPause && _pauseBlinkOn)
+                              ? Icons.pause_circle_filled
+                              : icon,
+                          size: height * 0.34,
+                          color: isBlinkingPause
+                              ? (_pauseBlinkOn ? Colors.white : pauseRed)
+                              : (isPressed
+                                    ? Colors.white
+                                    : const Color(0xFFD4D4DC)),
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            displayLabel,
+                            style: TextStyle(
+                              fontSize: (height * 0.29).clamp(10.5, 19.0),
+                              fontWeight: FontWeight.w800,
+                              color: isBlinkingPause
+                                  ? (_pauseBlinkOn ? Colors.white : pauseRed)
+                                  : (isPressed
+                                        ? Colors.white
+                                        : const Color(0xFFE4E4EC)),
+                              letterSpacing: 0.5,
+                              height: 1.05,
+                            ),
+                          ),
+                          if (displaySubLabel.isNotEmpty && height >= 44)
+                            Text(
+                              displaySubLabel,
+                              style: TextStyle(
+                                fontSize: (height * 0.16).clamp(8.0, 10.5),
+                                fontWeight: FontWeight.w600,
+                                color: isBlinkingPause
+                                    ? (_pauseBlinkOn ? Colors.white : pauseRed)
+                                    : (isPressed ? accent : Colors.white38),
+                                height: 1.05,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ],
-            ),
-          ),
         ),
       ),
     );
