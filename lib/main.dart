@@ -1416,6 +1416,8 @@ class _GamePadScreenState extends State<GamePadScreen>
     required double height,
     double borderRadius = 14,
     IconData? icon,
+    VoidCallback? onCustomTap,
+    bool isPauseStyle = false,
   }) {
     final effectiveId = buttonId ?? 'btn_${action.name}';
     final isPhysicallyPressed =
@@ -1424,10 +1426,47 @@ class _GamePadScreenState extends State<GamePadScreen>
     final accent = _currentMap.accentColor;
     final usageCode = _currentMap.codeFor(action);
 
+    final pauseRed = const Color(0xFFEF4444);
+    final isBlinkingPause = isPauseStyle && _isPaused;
+
+    Color borderColor;
+    List<Color> gradientColors;
+
+    if (isBlinkingPause) {
+      final glowColor = _pauseBlinkOn ? pauseRed : const Color(0xFF7F1D1D);
+      borderColor = glowColor;
+      gradientColors = _pauseBlinkOn
+          ? [
+              pauseRed.withValues(alpha: 0.60),
+              const Color(0xFF991B1B).withValues(alpha: 0.40),
+            ]
+          : const [
+              Color(0xFF3B1D22),
+              Color(0xFF221316),
+            ];
+    } else {
+      borderColor = isPressed ? accent : const Color(0xFF45454E);
+      gradientColors = isPressed
+          ? [
+              accent.withValues(alpha: 0.42),
+              accent.withValues(alpha: 0.22),
+            ]
+          : const [
+              Color(0xFF35353C),
+              Color(0xFF27272C),
+            ];
+    }
+
+    final displayLabel = (isBlinkingPause && _pauseBlinkOn) ? 'PAUSA' : label;
+    final displaySubLabel = (isBlinkingPause && _pauseBlinkOn)
+        ? 'EN PAUSA'
+        : (isBlinkingPause ? 'PAUSA' : subLabel);
+
     return Listener(
       behavior: HitTestBehavior.opaque,
       onPointerDown: (e) {
         _buttonActivePointers.putIfAbsent(effectiveId, () => {}).add(e.pointer);
+        onCustomTap?.call();
         _updatePointerKeys(e.pointer, {usageCode});
       },
       onPointerMove: (e) {
@@ -1458,36 +1497,33 @@ class _GamePadScreenState extends State<GamePadScreen>
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: isPressed
-                ? [
-                    accent.withValues(alpha: 0.42),
-                    accent.withValues(alpha: 0.22),
-                  ]
-                : const [
-                    Color(0xFF35353C),
-                    Color(0xFF27272C),
-                  ],
+            colors: gradientColors,
           ),
           borderRadius: BorderRadius.circular(borderRadius),
           border: Border.all(
-            color: isPressed ? accent : const Color(0xFF45454E),
-            width: 1.5,
+            color: borderColor,
+            width: (isBlinkingPause && _pauseBlinkOn) ? 1.8 : 1.5,
           ),
-          boxShadow: isPressed
-              ? [
-                  BoxShadow(
-                    color: accent.withValues(alpha: 0.35),
-                    blurRadius: 12,
-                    spreadRadius: 1,
-                  ),
-                ]
-              : const [
-                  BoxShadow(
-                    color: Colors.black87,
-                    blurRadius: 8,
-                    offset: Offset(0, 4),
-                  ),
-                ],
+          boxShadow: [
+            if (isBlinkingPause && _pauseBlinkOn)
+              BoxShadow(
+                color: pauseRed.withValues(alpha: 0.65),
+                blurRadius: 14,
+                spreadRadius: 2,
+              )
+            else if (isPressed)
+              BoxShadow(
+                color: accent.withValues(alpha: 0.35),
+                blurRadius: 12,
+                spreadRadius: 1,
+              )
+            else
+              const BoxShadow(
+                color: Colors.black87,
+                blurRadius: 8,
+                offset: Offset(0, 4),
+              ),
+          ],
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -1499,9 +1535,13 @@ class _GamePadScreenState extends State<GamePadScreen>
               children: [
                 if (icon != null) ...[
                   Icon(
-                    icon,
+                    (isBlinkingPause && _pauseBlinkOn)
+                        ? Icons.pause_circle_filled
+                        : icon,
                     size: height * 0.34,
-                    color: isPressed ? Colors.white : const Color(0xFFD4D4DC),
+                    color: isBlinkingPause
+                        ? (_pauseBlinkOn ? Colors.white : pauseRed)
+                        : (isPressed ? Colors.white : const Color(0xFFD4D4DC)),
                   ),
                   const SizedBox(width: 4),
                 ],
@@ -1509,24 +1549,28 @@ class _GamePadScreenState extends State<GamePadScreen>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      label,
+                      displayLabel,
                       style: TextStyle(
                         fontSize: (height * 0.29).clamp(10.5, 19.0),
                         fontWeight: FontWeight.w800,
-                        color: isPressed
-                            ? Colors.white
-                            : const Color(0xFFE4E4EC),
+                        color: isBlinkingPause
+                            ? (_pauseBlinkOn ? Colors.white : pauseRed)
+                            : (isPressed
+                                ? Colors.white
+                                : const Color(0xFFE4E4EC)),
                         letterSpacing: 0.5,
                         height: 1.05,
                       ),
                     ),
-                    if (subLabel.isNotEmpty && height >= 44)
+                    if (displaySubLabel.isNotEmpty && height >= 44)
                       Text(
-                        subLabel,
+                        displaySubLabel,
                         style: TextStyle(
                           fontSize: (height * 0.16).clamp(8.0, 10.5),
                           fontWeight: FontWeight.w600,
-                          color: isPressed ? accent : Colors.white38,
+                          color: isBlinkingPause
+                              ? (_pauseBlinkOn ? Colors.white : pauseRed)
+                              : (isPressed ? accent : Colors.white38),
                           height: 1.05,
                         ),
                       ),
@@ -1600,6 +1644,10 @@ class _GamePadScreenState extends State<GamePadScreen>
               width: btnSize,
               height: btnSize,
               borderRadius: 15,
+              isPauseStyle: true,
+              onCustomTap: () {
+                _togglePauseIndicator();
+              },
             ),
             _buildHoldButton(
               buttonId: 'center_start',
@@ -1650,16 +1698,32 @@ class _GamePadScreenState extends State<GamePadScreen>
           ),
         ),
         const SizedBox(height: 8),
-        // Texto de autor / creditos abajo del boton MODO
-        const Text(
-          'EduPlays By Prof. Luis Choque',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 9.5,
-            fontWeight: FontWeight.w500,
-            color: Color(0xFF9E9E9E),
-            letterSpacing: 0.3,
-          ),
+        // Texto de autor / creditos en dos lineas abajo del boton MODO
+        const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'EduPlays By',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 9.5,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF9E9E9E),
+                letterSpacing: 0.3,
+              ),
+            ),
+            SizedBox(height: 1),
+            Text(
+              'Prof. Luis Choque',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 9.5,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF9E9E9E),
+                letterSpacing: 0.3,
+              ),
+            ),
+          ],
         ),
       ],
     );
