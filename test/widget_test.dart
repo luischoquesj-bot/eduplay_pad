@@ -1,30 +1,23 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
 import 'package:gamepad_x7/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('GamePad_X7 app launches smoke test', (WidgetTester tester) async {
+    // El mando GamePad_X7 esta disenado exclusivamente en modo horizontal (Landscape).
+    // Configuramos la resolucion de prueba en pantalla horizontal (p. ej. 840x390 - resolucion movil).
+    tester.view.physicalSize = const Size(840, 390);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+    // Construye la aplicacion GamePad_X7 y renderiza el primer cuadro.
+    await tester.pumpWidget(const GamePadX7App());
     await tester.pump();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // Verifica que el componente principal del mando este en pantalla.
+    expect(find.byType(GamePadScreen), findsOneWidget);
   });
 }

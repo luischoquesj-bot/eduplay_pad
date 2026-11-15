@@ -967,155 +967,159 @@ class _GamePadScreenState extends State<GamePadScreen>
           BoxShadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 3)),
         ],
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // 1. Selector segmentado P1 | P2 | P3 | P4
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: List.generate(4, (index) {
-              final p = index + 1;
-              final isSelected = _selectedPlayer == p;
-              final pColor = kPlayerMappings[p]!.accentColor;
-              return Listener(
-                onPointerDown: (_) => _switchPlayer(p),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 120),
-                  margin: const EdgeInsets.symmetric(horizontal: 2.5),
-                  padding: EdgeInsets.symmetric(
-                    horizontal: compact ? 9 : 13,
-                    vertical: barH * 0.14,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? pColor.withValues(alpha: 0.22)
-                        : const Color(0xFF2A2A30),
-                    borderRadius: BorderRadius.circular(9),
-                    border: Border.all(
-                      color: isSelected ? pColor : Colors.white12,
-                      width: 1.4,
-                    ),
-                  ),
-                  child: Text(
-                    'P$p',
-                    style: TextStyle(
-                      color: isSelected ? pColor : Colors.white60,
-                      fontWeight: FontWeight.w800,
-                      fontSize: compact ? 11.5 : 13,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-              );
-            }),
-          ),
-
-          // 2. Interruptor Toggle D-PAD / JOYSTICK para el lado izquierdo
-          Container(
-            padding: const EdgeInsets.all(3),
-            decoration: BoxDecoration(
-              color: const Color(0xFF16161A),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.white12),
-            ),
-            child: Row(
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.center,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            // 1. Selector segmentado P1 | P2 | P3 | P4
+            Row(
               mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildModeToggleChip(
-                  label: 'D-PAD',
-                  icon: Icons.gamepad_outlined,
-                  selected: _leftMode == LeftControlMode.dpad,
-                  accent: accent,
-                  compact: compact,
-                  onTap: () => _toggleLeftMode(LeftControlMode.dpad),
-                ),
-                const SizedBox(width: 4),
-                _buildModeToggleChip(
-                  label: 'JOYSTICK',
-                  icon: Icons.radio_button_checked,
-                  selected: _leftMode == LeftControlMode.joystick,
-                  accent: accent,
-                  compact: compact,
-                  onTap: () => _toggleLeftMode(LeftControlMode.joystick),
-                ),
-              ],
+              children: List.generate(4, (index) {
+                final p = index + 1;
+                final isSelected = _selectedPlayer == p;
+                final pColor = kPlayerMappings[p]!.accentColor;
+                return Listener(
+                  onPointerDown: (_) => _switchPlayer(p),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 120),
+                    margin: const EdgeInsets.symmetric(horizontal: 2.5),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: compact ? 9 : 13,
+                      vertical: barH * 0.14,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? pColor.withValues(alpha: 0.22)
+                          : const Color(0xFF2A2A30),
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(
+                        color: isSelected ? pColor : Colors.white12,
+                        width: 1.4,
+                      ),
+                    ),
+                    child: Text(
+                      'P$p',
+                      style: TextStyle(
+                        color: isSelected ? pColor : Colors.white60,
+                        fontWeight: FontWeight.w800,
+                        fontSize: compact ? 11.5 : 13,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                );
+              }),
             ),
-          ),
 
-          // 3. Botones superiores independientes: COIN + SELECT (con opcion de Z-N64 o indicador EN PAUSA parpadeante)
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildHoldButton(
-                buttonId: 'top_coin',
-                action: PadAction.coin,
-                label: 'COIN',
-                subLabel: _currentMap.labelFor(PadAction.coin),
-                width: compact ? 68 : 84,
-                height: barH * 0.68,
-                borderRadius: 9,
-                icon: Icons.monetization_on_outlined,
-              ),
-              const SizedBox(width: 8),
-              _buildTopSelectPauseOrExtraButton(
-                width: compact ? 82 : 106,
-                height: barH * 0.68,
-              ),
-            ],
-          ),
-
-          // 4. Boton de Estado Bluetooth (activar visibilidad / reconectar)
-          Listener(
-            onPointerDown: (_) => _showBluetoothDialog(),
-            child: Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: compact ? 9 : 12,
-                vertical: barH * 0.14,
-              ),
+            // 2. Interruptor Toggle D-PAD / JOYSTICK para el lado izquierdo
+            Container(
+              padding: const EdgeInsets.all(3),
               decoration: BoxDecoration(
-                color: _connectedDeviceName != null
-                    ? const Color(0xFF143824)
-                    : const Color(0xFF2B2B32),
+                color: const Color(0xFF16161A),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: _connectedDeviceName != null
-                      ? const Color(0xFF4ADE80)
-                      : Colors.white24,
-                  width: 1.2,
-                ),
+                border: Border.all(color: Colors.white12),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    _connectedDeviceName != null
-                        ? Icons.bluetooth_connected
-                        : Icons.bluetooth,
-                    size: compact ? 15 : 17,
-                    color: _connectedDeviceName != null
-                        ? const Color(0xFF4ADE80)
-                        : accent,
+                  _buildModeToggleChip(
+                    label: 'D-PAD',
+                    icon: Icons.gamepad_outlined,
+                    selected: _leftMode == LeftControlMode.dpad,
+                    accent: accent,
+                    compact: compact,
+                    onTap: () => _toggleLeftMode(LeftControlMode.dpad),
                   ),
-                  const SizedBox(width: 5),
-                  ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: screenW * 0.13),
-                    child: Text(
-                      _connectedDeviceName ?? 'BT HID',
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: compact ? 11 : 12,
-                        fontWeight: FontWeight.w700,
-                        color: _connectedDeviceName != null
-                            ? const Color(0xFF4ADE80)
-                            : Colors.white70,
-                      ),
-                    ),
+                  const SizedBox(width: 4),
+                  _buildModeToggleChip(
+                    label: 'JOYSTICK',
+                    icon: Icons.radio_button_checked,
+                    selected: _leftMode == LeftControlMode.joystick,
+                    accent: accent,
+                    compact: compact,
+                    onTap: () => _toggleLeftMode(LeftControlMode.joystick),
                   ),
                 ],
               ),
             ),
-          ),
-        ],
+
+            // 3. Botones superiores independientes: COIN + SELECT (con opcion de Z-N64 o indicador EN PAUSA parpadeante)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildHoldButton(
+                  buttonId: 'top_coin',
+                  action: PadAction.coin,
+                  label: 'COIN',
+                  subLabel: _currentMap.labelFor(PadAction.coin),
+                  width: compact ? 68 : 84,
+                  height: barH * 0.68,
+                  borderRadius: 9,
+                  icon: Icons.monetization_on_outlined,
+                ),
+                const SizedBox(width: 8),
+                _buildTopSelectPauseOrExtraButton(
+                  width: compact ? 82 : 106,
+                  height: barH * 0.68,
+                ),
+              ],
+            ),
+
+            // 4. Boton de Estado Bluetooth (activar visibilidad / reconectar)
+            Listener(
+              onPointerDown: (_) => _showBluetoothDialog(),
+              child: Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: compact ? 9 : 12,
+                  vertical: barH * 0.14,
+                ),
+                decoration: BoxDecoration(
+                  color: _connectedDeviceName != null
+                      ? const Color(0xFF143824)
+                      : const Color(0xFF2B2B32),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: _connectedDeviceName != null
+                        ? const Color(0xFF4ADE80)
+                        : Colors.white24,
+                    width: 1.2,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _connectedDeviceName != null
+                          ? Icons.bluetooth_connected
+                          : Icons.bluetooth,
+                      size: compact ? 15 : 17,
+                      color: _connectedDeviceName != null
+                          ? const Color(0xFF4ADE80)
+                          : accent,
+                    ),
+                    const SizedBox(width: 5),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: screenW * 0.13),
+                      child: Text(
+                        _connectedDeviceName ?? 'BT HID',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: compact ? 11 : 12,
+                          fontWeight: FontWeight.w700,
+                          color: _connectedDeviceName != null
+                              ? const Color(0xFF4ADE80)
+                              : Colors.white70,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1659,22 +1663,25 @@ class _GamePadScreenState extends State<GamePadScreen>
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: accent.withValues(alpha: 0.35)),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.swap_horiz_rounded, color: accent, size: 16),
-                const SizedBox(width: 4),
-                Text(
-                  _leftMode == LeftControlMode.dpad
-                      ? 'MODO: D-PAD'
-                      : 'MODO: STICK',
-                  style: const TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white70,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.swap_horiz_rounded, color: accent, size: 16),
+                  const SizedBox(width: 4),
+                  Text(
+                    _leftMode == LeftControlMode.dpad
+                        ? 'MODO: D-PAD'
+                        : 'MODO: STICK',
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white70,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
