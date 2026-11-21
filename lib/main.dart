@@ -20,7 +20,7 @@ class GamePadX7App extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'GamePad_X7',
+      title: 'EduPlay Pad',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: const Color(0xFF161619),
@@ -73,7 +73,7 @@ class PlayerKeyMap {
   String labelFor(PadAction action) => keyLabels[action] ?? '';
 }
 
-/// Mapeo Multimando P1 a P4 (sin colisiones entre jugadores, con codigos HID unicos por jugador)
+/// Mapeo Multimando P1 a P6 (sin colisiones entre jugadores, con codigos HID unicos por jugador)
 const Map<int, PlayerKeyMap> kPlayerMappings = {
   1: PlayerKeyMap(
     playerNumber: 1,
@@ -235,6 +235,86 @@ const Map<int, PlayerKeyMap> kPlayerMappings = {
       PadAction.extraZ: 'GP_X7',
     },
   ),
+  5: PlayerKeyMap(
+    playerNumber: 5,
+    accentColor: Color(0xFFA78BFA),
+    codes: {
+      PadAction.up: 0x2F, // [ (Corchete izquierdo)
+      PadAction.down: 0x34, // ' (Apostrofe / Comilla simple)
+      PadAction.left: 0x33, // ; (Punto y coma)
+      PadAction.right: 0x31, // \ (Barra invertida)
+      PadAction.a: 0x36, // , (Coma)
+      PadAction.b: 0x37, // . (Punto)
+      PadAction.x: 0x38, // / (Barra inclinada)
+      PadAction.y: 0x30, // ] (Corchete derecho)
+      PadAction.lb: 0x2D, // - (Guion medio)
+      PadAction.rb: 0x2E, // = (Signo igual)
+      PadAction.lt: 0x35, // ` (Acento grave / Tilde izquierda)
+      PadAction.rt: 0x39, // Caps Lock (Bloq Mayus)
+      PadAction.select: 0x4C, // Delete (Suprimir)
+      PadAction.coin: 0x4A, // Home (Inicio)
+      PadAction.start: 0x4D, // End (Fin)
+      PadAction.extraZ: 0x49, // Insert (Boton extra P5)
+    },
+    keyLabels: {
+      PadAction.up: '[',
+      PadAction.down: "'",
+      PadAction.left: ';',
+      PadAction.right: r'\',
+      PadAction.a: ',',
+      PadAction.b: '.',
+      PadAction.x: '/',
+      PadAction.y: ']',
+      PadAction.lb: '-',
+      PadAction.rb: '=',
+      PadAction.lt: '`',
+      PadAction.rt: 'CAPS',
+      PadAction.select: 'DEL',
+      PadAction.coin: 'HOME',
+      PadAction.start: 'END',
+      PadAction.extraZ: 'GP_X7',
+    },
+  ),
+  6: PlayerKeyMap(
+    playerNumber: 6,
+    accentColor: Color(0xFFFB923C),
+    codes: {
+      PadAction.up: 0x3A, // F1
+      PadAction.down: 0x3B, // F2
+      PadAction.left: 0x3C, // F3
+      PadAction.right: 0x3D, // F4
+      PadAction.a: 0x3E, // F5
+      PadAction.b: 0x3F, // F6
+      PadAction.x: 0x40, // F7
+      PadAction.y: 0x41, // F8
+      PadAction.lb: 0x42, // F9
+      PadAction.rb: 0x43, // F10
+      PadAction.lt: 0x44, // F11
+      PadAction.rt: 0x45, // F12
+      PadAction.select: 0x4B, // Page Up (Re Pag)
+      PadAction.coin: 0x4E, // Page Down (Av Pag)
+      PadAction.start: 0x48, // Pause / Break
+      PadAction.extraZ: 0x47, // Scroll Lock (Boton extra P6)
+    },
+    keyLabels: {
+      PadAction.up: 'F1',
+      PadAction.down: 'F2',
+      PadAction.left: 'F3',
+      PadAction.right: 'F4',
+      PadAction.a: 'F5',
+      PadAction.b: 'F6',
+      PadAction.x: 'F7',
+      PadAction.y: 'F8',
+      PadAction.lb: 'F9',
+      PadAction.rb: 'F10',
+      PadAction.lt: 'F11',
+      PadAction.rt: 'F12',
+      PadAction.select: 'PGUP',
+      PadAction.coin: 'PGDN',
+      PadAction.start: 'BRK',
+      PadAction.extraZ: 'GP_X7',
+    },
+  ),
 };
 
 class GamePadScreen extends StatefulWidget {
@@ -246,13 +326,14 @@ class GamePadScreen extends StatefulWidget {
 
 class _GamePadScreenState extends State<GamePadScreen>
     with WidgetsBindingObserver {
-  static const MethodChannel _hidChannel = MethodChannel('com.magcubic.x7/hid');
+  static const MethodChannel _hidChannel = MethodChannel('com.eduplay.pad/hid');
 
   int _selectedPlayer = 1;
   LeftControlMode _leftMode = LeftControlMode.dpad;
 
   String? _connectedDeviceName;
   bool _isHidRegistered = false;
+  String _hidStatusCode = 'NOT_REGISTERED';
   List<Map<String, String>> _pairedDevices = [];
   Timer? _statusTimer;
 
@@ -333,7 +414,11 @@ class _GamePadScreenState extends State<GamePadScreen>
       _refreshConnectedDevice();
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
-      _clearAllInputs();
+      // No se envia ningun comando de desconexion ni cierre Bluetooth al minimizar o pausar la app;
+      // unicamente se liberan los punteros tactiles locales si quedaba algun boton presionado.
+      if (_pointerActiveKeys.isNotEmpty || _buttonActivePointers.isNotEmpty) {
+        _clearAllInputs();
+      }
     }
   }
 
@@ -344,6 +429,14 @@ class _GamePadScreenState extends State<GamePadScreen>
       setState(() {
         _connectedDeviceName = args?['connectedDevice'] as String?;
         _isHidRegistered = (args?['isRegistered'] as bool?) ?? false;
+        final code = (args?['statusCode'] ?? args?['state']) as String?;
+        if (code != null && code.isNotEmpty) {
+          _hidStatusCode = code;
+        } else {
+          _hidStatusCode = _connectedDeviceName != null
+              ? 'HID_OK'
+              : (_isHidRegistered ? 'NO_HOST' : 'NOT_REGISTERED');
+        }
       });
     }
   }
@@ -353,6 +446,11 @@ class _GamePadScreenState extends State<GamePadScreen>
       final granted =
           await _hidChannel.invokeMethod<bool>('requestPermissions') ?? false;
       if (!granted && makeDiscoverable) {
+        if (mounted) {
+          setState(() {
+            _hidStatusCode = 'NO_PERMISSION';
+          });
+        }
         return;
       }
       final res = await _hidChannel.invokeMapMethod<String, dynamic>(
@@ -361,9 +459,13 @@ class _GamePadScreenState extends State<GamePadScreen>
       );
       if (!mounted || res == null) return;
       final pairedRaw = res['pairedDevices'] as List?;
+      final statusCode = (res['statusCode'] ?? res['state'])?.toString();
       setState(() {
         _connectedDeviceName = res['connectedDevice'] as String?;
         _isHidRegistered = (res['isRegistered'] as bool?) ?? false;
+        if (statusCode != null && statusCode.isNotEmpty) {
+          _hidStatusCode = statusCode;
+        }
         if (pairedRaw != null) {
           _pairedDevices = pairedRaw
               .whereType<Map>()
@@ -381,15 +483,34 @@ class _GamePadScreenState extends State<GamePadScreen>
     }
   }
 
+  Future<void> _disconnectBluetoothHid() async {
+    HapticFeedback.mediumImpact();
+    _clearAllInputs();
+    try {
+      await _hidChannel.invokeMethod('disconnectHid');
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _connectedDeviceName = null;
+      _isHidRegistered = false;
+      _hidStatusCode = 'NOT_REGISTERED';
+    });
+  }
+
   Future<void> _refreshConnectedDevice() async {
     try {
       final name = await _hidChannel.invokeMethod<String>('getConnectedDevice');
       if (!mounted) return;
-      if (name != _connectedDeviceName) {
-        setState(() {
-          _connectedDeviceName = name;
-        });
-      }
+      setState(() {
+        _connectedDeviceName = name;
+        if (name != null) {
+          if (_hidStatusCode != 'SEND_FAILED') {
+            _hidStatusCode = 'HID_OK';
+          }
+        } else if (_hidStatusCode == 'HID_OK') {
+          _hidStatusCode = _isHidRegistered ? 'NO_HOST' : 'NOT_REGISTERED';
+        }
+      });
     } catch (_) {}
   }
 
@@ -447,10 +568,19 @@ class _GamePadScreenState extends State<GamePadScreen>
       setState(() {
         _activeKeys = consolidated;
       });
-      // Envio inmediato de latencia cero (hasta 6 teclas simultaneas)
+      // Envio inmediato de latencia cero (hasta 6 teclas simultaneas) con diagnostico real
       final payload = consolidated.take(6).toList(growable: false);
       _hidChannel
-          .invokeMethod('sendKeys', {'keys': payload})
+          .invokeMethod<dynamic>('sendKeys', {'keys': payload})
+          .then((res) {
+            if (!mounted || res == null) return;
+            final code = res.toString();
+            if (code.isNotEmpty && code != _hidStatusCode) {
+              setState(() {
+                _hidStatusCode = code;
+              });
+            }
+          })
           .catchError((_) {});
     } else {
       setState(() {});
@@ -526,7 +656,7 @@ class _GamePadScreenState extends State<GamePadScreen>
               const SizedBox(width: 10),
               const Expanded(
                 child: Text(
-                  'Bluetooth 5.0 HID - GamePad_X7',
+                  'Bluetooth 5.0 HID - EduPlay Pad',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                 ),
               ),
@@ -589,7 +719,7 @@ class _GamePadScreenState extends State<GamePadScreen>
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 8),
                       child: Text(
-                        'No se encontraron dispositivos vinculados. Activa la visibilidad y vincula "GamePad_X7" desde el proyector Magcubic X7.',
+                        'No se encontraron dispositivos vinculados. Activa la visibilidad y vincula "EduPlay Pad" desde el proyector Magcubic X7.',
                         style: TextStyle(fontSize: 12, color: Colors.white54),
                       ),
                     )
@@ -644,6 +774,17 @@ class _GamePadScreenState extends State<GamePadScreen>
             ),
           ),
           actions: [
+            TextButton.icon(
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFFEF4444),
+              ),
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                _disconnectBluetoothHid();
+              },
+              icon: const Icon(Icons.bluetooth_disabled, size: 18),
+              label: const Text('Desconectar BT'),
+            ),
             TextButton.icon(
               onPressed: () {
                 Navigator.of(ctx).pop();
@@ -946,7 +1087,7 @@ class _GamePadScreenState extends State<GamePadScreen>
   }
 
   // ===========================================================================
-  // BARRA SUPERIOR: P1..P4 | TOGGLE D-PAD/JOYSTICK | SELECT & START | BLUETOOTH
+  // BARRA SUPERIOR: P1..P6 | TOGGLE D-PAD/JOYSTICK | SELECT & START | BLUETOOTH
   // ===========================================================================
   Widget _buildTopBar(double screenW, double barH) {
     final accent = _currentMap.accentColor;
@@ -974,10 +1115,10 @@ class _GamePadScreenState extends State<GamePadScreen>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // 1. Selector segmentado P1 | P2 | P3 | P4
+              // 1. Selector segmentado P1 | P2 | P3 | P4 | P5 | P6
               Row(
                 mainAxisSize: MainAxisSize.min,
-                children: List.generate(4, (index) {
+                children: List.generate(6, (index) {
                   final p = index + 1;
                   final isSelected = _selectedPlayer == p;
                   final pColor = kPlayerMappings[p]!.accentColor;
@@ -1075,25 +1216,29 @@ class _GamePadScreenState extends State<GamePadScreen>
               // Separacion responsiva en porcentaje entre PAUSE y BT HID, moviendo BT HID ligeramente a la derecha
               SizedBox(width: screenW * 0.045),
 
-              // 4. Boton de Estado Bluetooth (activar visibilidad / reconectar)
+              // 4. Boton de Estado Bluetooth + Diagnostico HID en tiempo real
               Padding(
                 padding: EdgeInsets.only(right: screenW * 0.008),
                 child: Listener(
                   onPointerDown: (_) => _showBluetoothDialog(),
                   child: Container(
                     padding: EdgeInsets.symmetric(
-                      horizontal: compact ? 9 : 12,
-                      vertical: barH * 0.14,
+                      horizontal: compact ? 8 : 11,
+                      vertical: barH * 0.10,
                     ),
                     decoration: BoxDecoration(
-                      color: _connectedDeviceName != null
+                      color: _hidStatusCode == 'HID_OK'
                           ? const Color(0xFF143824)
-                          : const Color(0xFF2B2B32),
+                          : (_hidStatusCode == 'SEND_FAILED'
+                                ? const Color(0xFF3B1A1A)
+                                : const Color(0xFF2B2B32)),
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
-                        color: _connectedDeviceName != null
+                        color: _hidStatusCode == 'HID_OK'
                             ? const Color(0xFF4ADE80)
-                            : Colors.white24,
+                            : (_hidStatusCode == 'SEND_FAILED'
+                                  ? const Color(0xFFEF4444)
+                                  : Colors.white24),
                         width: 1.2,
                       ),
                     ),
@@ -1105,24 +1250,48 @@ class _GamePadScreenState extends State<GamePadScreen>
                               ? Icons.bluetooth_connected
                               : Icons.bluetooth,
                           size: compact ? 15 : 17,
-                          color: _connectedDeviceName != null
+                          color: _hidStatusCode == 'HID_OK'
                               ? const Color(0xFF4ADE80)
-                              : accent,
+                              : (_hidStatusCode == 'SEND_FAILED'
+                                    ? const Color(0xFFEF4444)
+                                    : accent),
                         ),
                         const SizedBox(width: 5),
-                        ConstrainedBox(
-                          constraints: BoxConstraints(maxWidth: screenW * 0.13),
-                          child: Text(
-                            _connectedDeviceName ?? 'BT HID',
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: compact ? 11 : 12,
-                              fontWeight: FontWeight.w700,
-                              color: _connectedDeviceName != null
-                                  ? const Color(0xFF4ADE80)
-                                  : Colors.white70,
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: screenW * 0.12,
+                              ),
+                              child: Text(
+                                _connectedDeviceName ?? 'BT HID',
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: compact ? 10.0 : 11.0,
+                                  fontWeight: FontWeight.w800,
+                                  color: _connectedDeviceName != null
+                                      ? const Color(0xFF4ADE80)
+                                      : Colors.white,
+                                  height: 1.05,
+                                ),
+                              ),
                             ),
-                          ),
+                            Text(
+                              _hidStatusCode,
+                              style: TextStyle(
+                                fontSize: compact ? 7.5 : 8.5,
+                                fontWeight: FontWeight.w700,
+                                color: _hidStatusCode == 'HID_OK'
+                                    ? const Color(0xFF86EFAC)
+                                    : (_hidStatusCode == 'NO_HOST'
+                                          ? const Color(0xFFFBBF24)
+                                          : const Color(0xFFFCA5A5)),
+                                height: 1.05,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
