@@ -780,6 +780,7 @@ class _GamePadScreenState extends State<GamePadScreen>
                           ),
                           onPressed: () async {
                             Navigator.of(ctx).pop();
+                            _userManuallyDisconnected = false;
                             await _hidChannel.invokeMethod('connectDevice', {
                               'address': dev['address'],
                             });
@@ -1948,42 +1949,49 @@ class _GamePadScreenState extends State<GamePadScreen>
           ),
         ),
         const SizedBox(height: 8),
-        // Texto de autor / creditos en dos lineas abajo del boton MODO
-        const Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            FittedBox(
+        // Texto de autor / creditos en dos lineas abajo del boton MODO (ambas lineas con el mismo tamano de fuente)
+        SizedBox(
+          width: width,
+          height: 26,
+          child: OverflowBox(
+            minWidth: 0,
+            maxWidth: width * 1.85,
+            minHeight: 0,
+            maxHeight: 30,
+            child: const FittedBox(
               fit: BoxFit.scaleDown,
-              child: Text(
-                'EduPlay Pad for EduPlays',
-                maxLines: 1,
-                softWrap: false,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w500,
-                  color: Color(0xFF9E9E9E),
-                  letterSpacing: 0.3,
-                ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'EduPlay Pad for EduPlays',
+                    maxLines: 1,
+                    softWrap: false,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF9E9E9E),
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                  SizedBox(height: 1),
+                  Text(
+                    'Prof. Luis Choque — EduProjects BO',
+                    maxLines: 1,
+                    softWrap: false,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF9E9E9E),
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ],
               ),
             ),
-            SizedBox(height: 1),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                'Prof. Luis Choque — EduProjects BO',
-                maxLines: 1,
-                softWrap: false,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF9E9E9E),
-                  letterSpacing: 0.3,
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ],
     );

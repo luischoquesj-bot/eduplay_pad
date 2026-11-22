@@ -34,6 +34,7 @@ class MainActivity : FlutterActivity() {
     private var isServiceBound = false
     @Volatile private var pendingDiscoverableOnGrant = false
     @Volatile private var isRequestingPermissions = false
+    @Volatile private var userManuallyDisconnected = false
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var methodChannel: MethodChannel? = null
@@ -87,11 +88,20 @@ class MainActivity : FlutterActivity() {
             }
         }
 
+        // Si los permisos Bluetooth ya estan concedidos al arrancar MainActivity,
+        // iniciar automaticamente HidForegroundService e inicializar HID sin esperar toque manual
+        if (hasBluetoothPermissions() && isBluetoothEnabled() && !userManuallyDisconnected) {
+            initializeOrAttachHidService(makeDiscoverable = false)
+        }
+
         methodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
         methodChannel?.setMethodCallHandler { call, result ->
             when (call.method) {
                 "requestPermissions" -> {
                     if (hasBluetoothPermissions()) {
+                        if (isBluetoothEnabled() && !userManuallyDisconnected) {
+                            initializeOrAttachHidService(makeDiscoverable = false)
+                        }
                         result.success(true)
                     } else {
                         pendingPermissionResults.add(result)
@@ -100,6 +110,7 @@ class MainActivity : FlutterActivity() {
                 }
 
                 "initHid" -> {
+                    userManuallyDisconnected = false
                     val makeDiscoverable = call.argument<Boolean>("discoverable") ?: false
                     if (!hasBluetoothPermissions()) {
                         pendingDiscoverableOnGrant = pendingDiscoverableOnGrant || makeDiscoverable
@@ -124,38 +135,38 @@ class MainActivity : FlutterActivity() {
                     val keys = call.argument<List<Int>>("keys")
                         ?: (call.arguments as? List<*>)?.mapNotNull { (it as? Number)?.toInt() }
                         ?: emptyList()
-                    if (!hasBluetoothPermissions()) {
-                        requestRequiredPermissions()
-                        result.success(HidForegroundService.STATUS_NO_PERMISSION)
-                        return@setMethodCallHandler
-                    }
-                    if (!isBluetoothEnabled()) {
-                        result.success(HidForegroundService.STATUS_BT_OFF)
-                        return@setMethodCallHandler
-                    }
                     val service = activeService()
-                    val statusCode = if (service == null) {
-                        startAndBindHidService()
-                        HidForegroundService.STATUS_NOT_REGISTERED
-                    } else {
-                        if (!service.isAppRegistered) {
+                    val statusCode = if (service != null) {
+                        if (!service.isAppRegistered && !userManuallyDisconnected) {
                             service.ensureHidInitialized()
                         }
                         service.sendKeyboardReport(keys)
+                    } else {
+                        if (!hasBluetoothPermissions()) {
+                            requestRequiredPermissions()
+                            HidForegroundService.STATUS_NO_PERMISSION
+                        } else if (!isBluetoothEnabled()) {
+                            HidForegroundService.STATUS_BT_OFF
+                        } else {
+                            if (!userManuallyDisconnected) {
+                                startAndBindHidService()
+                            }
+                            HidForegroundService.STATUS_NOT_REGISTERED
+                        }
                     }
                     result.success(statusCode)
                 }
 
                 "getConnectedDevice" -> {
                     val service = activeService()
-                    if (service != null && hasBluetoothPermissions() && isBluetoothEnabled() && !service.isAppRegistered) {
+                    if (service != null && !userManuallyDisconnected && hasBluetoothPermissions() && isBluetoothEnabled() && !service.isAppRegistered) {
                         service.ensureHidInitialized()
                     }
                     result.success(service?.getActiveHostName())
                 }
 
                 "getHidStatus" -> {
-                    val autoInit = call.argument<Boolean>("autoInit") ?: true
+                    val autoInit = (call.argument<Boolean>("autoInit") ?: true) && !userManuallyDisconnected
                     if (!hasBluetoothPermissions()) {
                         result.success(buildFallbackStatusMap(HidForegroundService.STATUS_NO_PERMISSION))
                         return@setMethodCallHandler
@@ -166,7 +177,7 @@ class MainActivity : FlutterActivity() {
                     }
                     val service = activeService()
                     if (service != null) {
-                        if (autoInit && !service.isAppRegistered) {
+                        if (autoInit && (!service.isAppRegistered || service.resolveConnectedHost() == null)) {
                             result.success(service.ensureHidInitialized())
                         } else {
                             result.success(service.buildHidStatusMap())
@@ -189,13 +200,18 @@ class MainActivity : FlutterActivity() {
                 }
 
                 "connectDevice" -> {
+                    userManuallyDisconnected = false
                     val address = call.argument<String>("address")
                     if (!hasBluetoothPermissions()) {
                         requestRequiredPermissions()
                         result.success(false)
                         return@setMethodCallHandler
                     }
-                    val service = activeService()
+                    var service = activeService()
+                    if (service == null) {
+                        startAndBindHidService()
+                        service = activeService()
+                    }
                     if (service != null && !service.isAppRegistered) {
                         service.ensureHidInitialized()
                     }
@@ -204,6 +220,7 @@ class MainActivity : FlutterActivity() {
                 }
 
                 "disconnectHid" -> {
+                    userManuallyDisconnected = true
                     disconnectAndStopHidService()
                     result.success(buildFallbackStatusMap(HidForegroundService.STATUS_NOT_REGISTERED))
                 }
@@ -215,8 +232,10 @@ class MainActivity : FlutterActivity() {
 
     override fun onStart() {
         super.onStart()
-        // Si el servicio ya existe, revincular sin reiniciar la sesion Bluetooth
-        if (HidForegroundService.instance != null) {
+        // Iniciar o revincular automaticamente el servicio HID cuando MainActivity arranca y tiene permisos
+        if (hasBluetoothPermissions() && isBluetoothEnabled() && !userManuallyDisconnected) {
+            initializeOrAttachHidService(makeDiscoverable = false)
+        } else if (HidForegroundService.instance != null) {
             bindToHidServiceIfNeeded()
             HidForegroundService.instance?.onStateChangedListener = {
                 notifyConnectionStateChanged()
@@ -227,12 +246,12 @@ class MainActivity : FlutterActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (hasBluetoothPermissions() && isBluetoothEnabled() && !userManuallyDisconnected) {
+            initializeOrAttachHidService(makeDiscoverable = false)
+        }
         activeService()?.let { service ->
             service.onStateChangedListener = {
                 notifyConnectionStateChanged()
-            }
-            if (hasBluetoothPermissions() && isBluetoothEnabled() && !service.isAppRegistered) {
-                service.ensureHidInitialized()
             }
             notifyConnectionStateChanged()
         }
@@ -331,8 +350,6 @@ class MainActivity : FlutterActivity() {
             ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) ==
                 PackageManager.PERMISSION_GRANTED &&
                 ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADVERTISE) ==
-                PackageManager.PERMISSION_GRANTED &&
-                ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) ==
                 PackageManager.PERMISSION_GRANTED
         } else {
             ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
@@ -404,6 +421,7 @@ class MainActivity : FlutterActivity() {
             val granted = hasBluetoothPermissions()
             flushPendingPermissionResults(granted)
             if (granted) {
+                userManuallyDisconnected = false
                 val shouldDiscover = pendingDiscoverableOnGrant
                 pendingDiscoverableOnGrant = false
                 initializeOrAttachHidService(makeDiscoverable = shouldDiscover)
@@ -419,6 +437,7 @@ class MainActivity : FlutterActivity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_ENABLE_BT_CODE || requestCode == REQUEST_DISCOVERABLE_CODE) {
             if (hasBluetoothPermissions() && isBluetoothEnabled()) {
+                userManuallyDisconnected = false
                 initializeOrAttachHidService(makeDiscoverable = false)
             }
             notifyConnectionStateChanged()

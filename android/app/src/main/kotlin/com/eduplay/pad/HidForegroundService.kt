@@ -29,6 +29,7 @@ import android.os.Looper
 import android.os.SystemClock
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
+import java.util.Arrays
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -43,6 +44,9 @@ class HidForegroundService : Service() {
         private const val NOTIFICATION_CHANNEL_ID = "eduplay_pad_hid_channel"
         private const val NOTIFICATION_ID = 7007
         private const val KEYBOARD_REPORT_ID = 1
+
+        private const val PREFS_NAME = "eduplay_pad_hid_prefs"
+        private const val KEY_LAST_HOST_ADDRESS = "last_connected_host_address"
 
         const val STATUS_HID_OK = "HID_OK"
         const val STATUS_NO_HOST = "NO_HOST"
@@ -105,8 +109,14 @@ class HidForegroundService : Service() {
     @Volatile private var isRegisteringApp: Boolean = false
     @Volatile private var lastRegisterAttemptMs: Long = 0L
     @Volatile private var isReceiverRegistered: Boolean = false
+    @Volatile private var lastSentReport: ByteArray? = null
 
-    private val hidExecutor = Executors.newSingleThreadExecutor()
+    // Hilo dedicado de alta prioridad para envio HID sin bloquear UI ni saturar L2CAP en multimando (4+ dispositivos)
+    private val hidExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "EduPlayPad-HidTx").apply {
+            priority = Thread.MAX_PRIORITY
+        }
+    }
     @Volatile var onStateChangedListener: (() -> Unit)? = null
 
     // SUBCLASS1_NONE evita bloqueos en capas OEM estrictas (Xiaomi HyperOS/MIUI, Infinix XOS, Tecno HiOS, Honor)
@@ -131,6 +141,26 @@ class HidForegroundService : Service() {
         )
     }
 
+    private fun saveLastConnectedHostAddress(address: String?) {
+        if (address.isNullOrBlank()) return
+        try {
+            getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY_LAST_HOST_ADDRESS, address)
+                .apply()
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun getLastConnectedHostAddress(): String? {
+        return try {
+            getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getString(KEY_LAST_HOST_ADDRESS, null)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private val bluetoothReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
@@ -141,11 +171,12 @@ class HidForegroundService : Service() {
                             mainHandler.postDelayed({
                                 ensureHidInitialized()
                                 onStateChangedListener?.invoke()
-                            }, 350L)
+                            }, 300L)
                         }
                         BluetoothAdapter.STATE_OFF,
                         BluetoothAdapter.STATE_TURNING_OFF -> {
                             connectedHost = null
+                            lastSentReport = null
                             isAppRegistered = false
                             isRegisteringApp = false
                             isGettingProfileProxy = false
@@ -163,6 +194,17 @@ class HidForegroundService : Service() {
                         intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
                     }
                     if (bondState == BluetoothDevice.BOND_BONDED && device != null) {
+                        saveLastConnectedHostAddress(device.address)
+                        mainHandler.postDelayed({
+                            ensureHidInitialized()
+                            if (isAppRegistered && resolveConnectedHost() == null) {
+                                try {
+                                    hidDevice?.connect(device)
+                                } catch (_: Exception) {
+                                }
+                            }
+                            onStateChangedListener?.invoke()
+                        }, 250L)
                         mainHandler.postDelayed({
                             if (isAppRegistered && resolveConnectedHost() == null) {
                                 try {
@@ -171,7 +213,28 @@ class HidForegroundService : Service() {
                                 }
                             }
                             onStateChangedListener?.invoke()
-                        }, 300L)
+                        }, 1100L)
+                    }
+                }
+                BluetoothDevice.ACTION_ACL_CONNECTED -> {
+                    val device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                    }
+                    if (device != null) {
+                        mainHandler.postDelayed({
+                            if (isAppRegistered && resolveConnectedHost() == null) {
+                                try {
+                                    if (device.bondState == BluetoothDevice.BOND_BONDED) {
+                                        hidDevice?.connect(device)
+                                    }
+                                } catch (_: Exception) {
+                                }
+                            }
+                            onStateChangedListener?.invoke()
+                        }, 350L)
                     }
                 }
             }
@@ -188,22 +251,28 @@ class HidForegroundService : Service() {
                 val active = resolveConnectedHost()
                 if (active != null) {
                     connectedHost = active
-                } else if (pluggedDevice != null) {
-                    connectedHost = pluggedDevice
-                    try {
-                        val state = hidDevice?.getConnectionState(pluggedDevice)
-                        if (state != BluetoothProfile.STATE_CONNECTED &&
-                            state != BluetoothProfile.STATE_CONNECTING
-                        ) {
-                            hidDevice?.connect(pluggedDevice)
-                        }
-                    } catch (_: Exception) {
-                    }
+                    saveLastConnectedHostAddress(active.address)
                 } else {
+                    if (pluggedDevice != null) {
+                        connectedHost = pluggedDevice
+                        saveLastConnectedHostAddress(pluggedDevice.address)
+                        try {
+                            hidDevice?.connect(pluggedDevice)
+                        } catch (_: Exception) {
+                        }
+                    }
                     autoConnectPairedDevice()
+                    // Reintento automatico escalonado por si la pila SDP del host tarda unos milisegundos en estar lista
+                    mainHandler.postDelayed({
+                        if (isAppRegistered && resolveConnectedHost() == null) {
+                            autoConnectPairedDevice()
+                        }
+                        onStateChangedListener?.invoke()
+                    }, 900L)
                 }
             } else {
                 connectedHost = null
+                lastSentReport = null
             }
             updateForegroundNotification()
             onStateChangedListener?.invoke()
@@ -213,11 +282,14 @@ class HidForegroundService : Service() {
             when (state) {
                 BluetoothProfile.STATE_CONNECTED -> {
                     connectedHost = device
+                    lastSentReport = null
+                    saveLastConnectedHostAddress(device?.address)
                     sendKeyboardReport(emptyList())
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     if (connectedHost?.address == device?.address) {
                         connectedHost = null
+                        lastSentReport = null
                     }
                     resolveConnectedHost()
                 }
@@ -267,6 +339,7 @@ class HidForegroundService : Service() {
                 synchronized(registrationLock) {
                     hidDevice = null
                     connectedHost = null
+                    lastSentReport = null
                     isAppRegistered = false
                     isRegisteringApp = false
                     isGettingProfileProxy = false
@@ -309,6 +382,7 @@ class HidForegroundService : Service() {
             val filter = IntentFilter().apply {
                 addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
                 addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+                addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 registerReceiver(bluetoothReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
@@ -419,8 +493,6 @@ class HidForegroundService : Service() {
             ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) ==
                 PackageManager.PERMISSION_GRANTED &&
                 ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADVERTISE) ==
-                PackageManager.PERMISSION_GRANTED &&
-                ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) ==
                 PackageManager.PERMISSION_GRANTED
         } else {
             ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
@@ -593,10 +665,21 @@ class HidForegroundService : Service() {
             null
         }
 
-        connectedHost = matching
+        if (matching != null) {
+            connectedHost = matching
+            saveLastConnectedHostAddress(matching.address)
+        } else {
+            connectedHost = null
+        }
         return matching
     }
 
+    /**
+     * Reconexion automatica al iniciar la app o al registrarse el servicio SDP:
+     * 1) Prioriza el ultimo host/proyector conectado guardado en SharedPreferences.
+     * 2) Busca en bluetoothAdapter.bondedDevices proyectores/TV/PC conocidos.
+     * 3) Si hay cualquier dispositivo vinculado, llama a hidDevice.connect(device).
+     */
     fun autoConnectPairedDevice() {
         if (!hasBluetoothPermissions() || !isBluetoothEnabled()) return
         val service = hidDevice ?: return
@@ -610,13 +693,27 @@ class HidForegroundService : Service() {
             null
         } ?: return
 
-        val preferred = bonded.firstOrNull { device ->
+        if (bonded.isEmpty()) return
+
+        val lastAddress = getLastConnectedHostAddress()
+        val lastHost = if (!lastAddress.isNullOrBlank()) {
+            bonded.firstOrNull { it.address.equals(lastAddress, ignoreCase = true) }
+        } else {
+            null
+        }
+
+        val preferred = lastHost ?: bonded.firstOrNull { device ->
             val name = (device.name ?: "").lowercase()
             name.contains("x7") ||
                 name.contains("magcubic") ||
                 name.contains("projector") ||
                 name.contains("proyector") ||
+                name.contains("hy300") ||
+                name.contains("hy320") ||
+                name.contains("wanbo") ||
                 name.contains("tv") ||
+                name.contains("android") ||
+                name.contains("box") ||
                 name.contains("pc") ||
                 name.contains("desktop") ||
                 name.contains("laptop")
@@ -631,10 +728,7 @@ class HidForegroundService : Service() {
 
         if (preferred != null) {
             try {
-                val state = service.getConnectionState(preferred)
-                if (state == BluetoothProfile.STATE_DISCONNECTED) {
-                    service.connect(preferred)
-                }
+                service.connect(preferred)
             } catch (_: Exception) {
             }
         }
@@ -648,6 +742,8 @@ class HidForegroundService : Service() {
         } catch (_: Exception) {
             null
         } ?: return false
+
+        saveLastConnectedHostAddress(device.address)
 
         return try {
             val currentState = service.getConnectionState(device)
@@ -664,30 +760,22 @@ class HidForegroundService : Service() {
         }
     }
 
+    /**
+     * Envio HID optimizado de latencia cero para multimando (4+ dispositivos simultaneos):
+     * - Ruta rapida sin llamadas IPC innecesarias (PackageManager/BluetoothManager/getConnectionState) en cada pulsacion.
+     * - Deduplicacion de reportes identicos no vacios para no saturar el canal L2CAP.
+     * - Respaldo automatico con getDevicesMatchingConnectionStates si connectedHost es null o el envio falla.
+     */
     fun sendKeyboardReport(activeKeys: List<Int>): String {
-        if (!hasBluetoothPermissions()) {
-            return STATUS_NO_PERMISSION
-        }
-        if (!isBluetoothEnabled()) {
-            return STATUS_BT_OFF
-        }
         val service = hidDevice
         if (service == null || !isAppRegistered) {
+            if (!hasBluetoothPermissions()) return STATUS_NO_PERMISSION
+            if (!isBluetoothEnabled()) return STATUS_BT_OFF
             return STATUS_NOT_REGISTERED
         }
 
-        // Respaldo automatico: verificar connectedHost o consultar getDevicesMatchingConnectionStates
         var host = connectedHost
-        val isHostValid = if (host != null) {
-            try {
-                service.getConnectionState(host) == BluetoothProfile.STATE_CONNECTED
-            } catch (_: Exception) {
-                false
-            }
-        } else {
-            false
-        }
-        if (!isHostValid) {
+        if (host == null) {
             host = try {
                 service.getDevicesMatchingConnectionStates(
                     intArrayOf(BluetoothProfile.STATE_CONNECTED)
@@ -701,9 +789,6 @@ class HidForegroundService : Service() {
         val targetHost = host ?: return STATUS_NO_HOST
 
         val report = ByteArray(8)
-        report[0] = 0x00
-        report[1] = 0x00
-
         var slot = 2
         for (usageId in activeKeys) {
             if (slot >= 8) break
@@ -712,6 +797,12 @@ class HidForegroundService : Service() {
                 report[slot] = code.toByte()
                 slot++
             }
+        }
+
+        val isReleaseReport = (slot == 2)
+        val previous = lastSentReport
+        if (!isReleaseReport && previous != null && Arrays.equals(previous, report)) {
+            return STATUS_HID_OK
         }
 
         return try {
@@ -728,11 +819,16 @@ class HidForegroundService : Service() {
                     if (refreshedHost != null) {
                         connectedHost = refreshedHost
                         ok = service.sendReport(refreshedHost, KEYBOARD_REPORT_ID, report)
+                    } else {
+                        connectedHost = null
                     }
+                }
+                if (ok) {
+                    lastSentReport = report
                 }
                 ok
             })
-            val sent = future.get(300, TimeUnit.MILLISECONDS)
+            val sent = future.get(250, TimeUnit.MILLISECONDS)
             if (sent) STATUS_HID_OK else STATUS_SEND_FAILED
         } catch (_: Exception) {
             STATUS_SEND_FAILED
@@ -817,6 +913,7 @@ class HidForegroundService : Service() {
         synchronized(registrationLock) {
             hidDevice = null
             connectedHost = null
+            lastSentReport = null
             isAppRegistered = false
             isRegisteringApp = false
             isGettingProfileProxy = false
