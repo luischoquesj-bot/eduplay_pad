@@ -58,8 +58,8 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/icon_gamepad_x7.png
-    - assets/icon_splasscreen_gamepad_x7.png
+    - assets/icon_eduplay_pad.png
+    - assets/splashscreen_eduplay_pad.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

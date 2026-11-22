@@ -1216,15 +1216,17 @@ class _GamePadScreenState extends State<GamePadScreen>
               // Separacion responsiva en porcentaje entre PAUSE y BT HID, moviendo BT HID ligeramente a la derecha
               SizedBox(width: screenW * 0.045),
 
-              // 4. Boton de Estado Bluetooth + Diagnostico HID en tiempo real
+              // 4. Boton de Estado Bluetooth + Diagnostico HID en tiempo real (tamano fijo proporcional)
               Padding(
                 padding: EdgeInsets.only(right: screenW * 0.008),
                 child: Listener(
                   onPointerDown: (_) => _showBluetoothDialog(),
                   child: Container(
+                    width: (screenW * 0.11).clamp(72.0, 112.0),
+                    height: barH * 0.68,
                     padding: EdgeInsets.symmetric(
-                      horizontal: compact ? 8 : 11,
-                      vertical: barH * 0.10,
+                      horizontal: compact ? 6 : 8,
+                      vertical: barH * 0.08,
                     ),
                     decoration: BoxDecoration(
                       color: _hidStatusCode == 'HID_OK'
@@ -1243,7 +1245,6 @@ class _GamePadScreenState extends State<GamePadScreen>
                       ),
                     ),
                     child: Row(
-                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
                           _connectedDeviceName != null
@@ -1257,16 +1258,15 @@ class _GamePadScreenState extends State<GamePadScreen>
                                     : accent),
                         ),
                         const SizedBox(width: 5),
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            ConstrainedBox(
-                              constraints: BoxConstraints(
-                                maxWidth: screenW * 0.12,
-                              ),
-                              child: Text(
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
                                 _connectedDeviceName ?? 'BT HID',
+                                maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   fontSize: compact ? 10.0 : 11.0,
@@ -1277,21 +1277,26 @@ class _GamePadScreenState extends State<GamePadScreen>
                                   height: 1.05,
                                 ),
                               ),
-                            ),
-                            Text(
-                              _hidStatusCode,
-                              style: TextStyle(
-                                fontSize: compact ? 7.5 : 8.5,
-                                fontWeight: FontWeight.w700,
-                                color: _hidStatusCode == 'HID_OK'
-                                    ? const Color(0xFF86EFAC)
-                                    : (_hidStatusCode == 'NO_HOST'
-                                          ? const Color(0xFFFBBF24)
-                                          : const Color(0xFFFCA5A5)),
-                                height: 1.05,
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  _hidStatusCode,
+                                  maxLines: 1,
+                                  style: TextStyle(
+                                    fontSize: compact ? 7.5 : 8.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: _hidStatusCode == 'HID_OK'
+                                        ? const Color(0xFF86EFAC)
+                                        : (_hidStatusCode == 'NO_HOST'
+                                              ? const Color(0xFFFBBF24)
+                                              : const Color(0xFFFCA5A5)),
+                                    height: 1.05,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -1925,7 +1930,7 @@ class _GamePadScreenState extends State<GamePadScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'EduPlays By',
+              'EduPlay Pad for EduPlays',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 9.5,
@@ -1936,7 +1941,7 @@ class _GamePadScreenState extends State<GamePadScreen>
             ),
             SizedBox(height: 1),
             Text(
-              'Prof. Luis Choque',
+              'Prof. Luis Choque — EduProjects BO',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 9.5,

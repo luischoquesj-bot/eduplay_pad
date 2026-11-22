@@ -1,4 +1,4 @@
-# gamepad_x7
+# eduplay_pad
 
 A new Flutter project.
 
