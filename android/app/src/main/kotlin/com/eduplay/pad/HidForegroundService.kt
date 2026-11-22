@@ -8,19 +8,25 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothClass
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothHidDevice
 import android.bluetooth.BluetoothHidDeviceAppQosSettings
 import android.bluetooth.BluetoothHidDeviceAppSdpSettings
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Binder
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
+import android.os.SystemClock
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import java.util.concurrent.Callable
@@ -42,6 +48,7 @@ class HidForegroundService : Service() {
         const val STATUS_NO_HOST = "NO_HOST"
         const val STATUS_NOT_REGISTERED = "NOT_REGISTERED"
         const val STATUS_NO_PERMISSION = "NO_PERMISSION"
+        const val STATUS_BT_OFF = "BT_OFF"
         const val STATUS_SEND_FAILED = "SEND_FAILED"
 
         @Volatile
@@ -68,7 +75,7 @@ class HidForegroundService : Service() {
             0x95.toByte(), 0x06.toByte(), // Report Count (6)
             0x75.toByte(), 0x08.toByte(), // Report Size (8)
             0x15.toByte(), 0x00.toByte(), // Logical Minimum (0)
-            0x25.toByte(), 0x65.toByte(), // Logical Maximum (101 - incluye Numpad completo)
+            0x25.toByte(), 0x65.toByte(), // Logical Maximum (101 - incluye Numpad completo y F1-F12)
             0x05.toByte(), 0x07.toByte(), // Usage Page (Key Codes)
             0x19.toByte(), 0x00.toByte(), // Usage Minimum (0)
             0x29.toByte(), 0x65.toByte(), // Usage Maximum (101)
@@ -82,6 +89,9 @@ class HidForegroundService : Service() {
     }
 
     private val binder = LocalBinder()
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val registrationLock = Any()
+
     private var bluetoothAdapter: BluetoothAdapter? = null
     @Volatile var hidDevice: BluetoothHidDevice? = null
         private set
@@ -90,9 +100,16 @@ class HidForegroundService : Service() {
     @Volatile var isAppRegistered: Boolean = false
         private set
 
+    @Volatile private var isGettingProfileProxy: Boolean = false
+    @Volatile private var lastProxyRequestMs: Long = 0L
+    @Volatile private var isRegisteringApp: Boolean = false
+    @Volatile private var lastRegisterAttemptMs: Long = 0L
+    @Volatile private var isReceiverRegistered: Boolean = false
+
     private val hidExecutor = Executors.newSingleThreadExecutor()
     @Volatile var onStateChangedListener: (() -> Unit)? = null
 
+    // SUBCLASS1_NONE evita bloqueos en capas OEM estrictas (Xiaomi HyperOS/MIUI, Infinix XOS, Tecno HiOS, Honor)
     private val sdpSettings by lazy {
         BluetoothHidDeviceAppSdpSettings(
             "EduPlay Pad",
@@ -114,14 +131,74 @@ class HidForegroundService : Service() {
         )
     }
 
+    private val bluetoothReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                BluetoothAdapter.ACTION_STATE_CHANGED -> {
+                    val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+                    when (state) {
+                        BluetoothAdapter.STATE_ON -> {
+                            mainHandler.postDelayed({
+                                ensureHidInitialized()
+                                onStateChangedListener?.invoke()
+                            }, 350L)
+                        }
+                        BluetoothAdapter.STATE_OFF,
+                        BluetoothAdapter.STATE_TURNING_OFF -> {
+                            connectedHost = null
+                            isAppRegistered = false
+                            isRegisteringApp = false
+                            isGettingProfileProxy = false
+                            updateForegroundNotification()
+                            onStateChangedListener?.invoke()
+                        }
+                    }
+                }
+                BluetoothDevice.ACTION_BOND_STATE_CHANGED -> {
+                    val bondState = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.ERROR)
+                    val device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                    }
+                    if (bondState == BluetoothDevice.BOND_BONDED && device != null) {
+                        mainHandler.postDelayed({
+                            if (isAppRegistered && resolveConnectedHost() == null) {
+                                try {
+                                    hidDevice?.connect(device)
+                                } catch (_: Exception) {
+                                }
+                            }
+                            onStateChangedListener?.invoke()
+                        }, 300L)
+                    }
+                }
+            }
+        }
+    }
+
     private val hidCallback = object : BluetoothHidDevice.Callback() {
         override fun onAppStatusChanged(pluggedDevice: BluetoothDevice?, registered: Boolean) {
-            isAppRegistered = registered
+            synchronized(registrationLock) {
+                isRegisteringApp = false
+                isAppRegistered = registered
+            }
             if (registered) {
-                val target = pluggedDevice ?: resolveConnectedHost()
-                if (target != null) {
-                    connectedHost = target
-                    hidDevice?.connect(target)
+                val active = resolveConnectedHost()
+                if (active != null) {
+                    connectedHost = active
+                } else if (pluggedDevice != null) {
+                    connectedHost = pluggedDevice
+                    try {
+                        val state = hidDevice?.getConnectionState(pluggedDevice)
+                        if (state != BluetoothProfile.STATE_CONNECTED &&
+                            state != BluetoothProfile.STATE_CONNECTING
+                        ) {
+                            hidDevice?.connect(pluggedDevice)
+                        }
+                    } catch (_: Exception) {
+                    }
                 } else {
                     autoConnectPairedDevice()
                 }
@@ -152,32 +229,48 @@ class HidForegroundService : Service() {
         override fun onGetReport(device: BluetoothDevice?, type: Byte, id: Byte, bufferSize: Int) {
             if (type == BluetoothHidDevice.REPORT_TYPE_INPUT) {
                 val reportId = if (id.toInt() == 0) KEYBOARD_REPORT_ID.toByte() else id
-                hidDevice?.replyReport(device, type, reportId, ByteArray(8))
+                try {
+                    hidDevice?.replyReport(device, type, reportId, ByteArray(8))
+                } catch (_: Exception) {
+                }
             }
+        }
+
+        override fun onSetProtocol(device: BluetoothDevice?, protocol: Byte) {
+            super.onSetProtocol(device, protocol)
         }
     }
 
     private val profileListener = object : BluetoothProfile.ServiceListener {
         override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
             if (profile == BluetoothProfile.HID_DEVICE) {
-                hidDevice = proxy as BluetoothHidDevice
-                if (!isAppRegistered) {
-                    hidDevice?.registerApp(
-                        sdpSettings,
-                        null,
-                        qosSettings,
-                        hidExecutor,
-                        hidCallback
-                    )
+                synchronized(registrationLock) {
+                    isGettingProfileProxy = false
+                    val oldProxy = hidDevice
+                    val newProxy = proxy as BluetoothHidDevice
+                    if (oldProxy != null && oldProxy !== newProxy) {
+                        try {
+                            bluetoothAdapter?.closeProfileProxy(BluetoothProfile.HID_DEVICE, oldProxy)
+                        } catch (_: Exception) {
+                        }
+                    }
+                    hidDevice = newProxy
                 }
+                registerHidAppIfNeeded()
+                updateForegroundNotification()
+                onStateChangedListener?.invoke()
             }
         }
 
         override fun onServiceDisconnected(profile: Int) {
             if (profile == BluetoothProfile.HID_DEVICE) {
-                hidDevice = null
-                connectedHost = null
-                isAppRegistered = false
+                synchronized(registrationLock) {
+                    hidDevice = null
+                    connectedHost = null
+                    isAppRegistered = false
+                    isRegisteringApp = false
+                    isGettingProfileProxy = false
+                }
                 updateForegroundNotification()
                 onStateChangedListener?.invoke()
             }
@@ -189,6 +282,7 @@ class HidForegroundService : Service() {
         instance = this
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
         bluetoothAdapter = bluetoothManager?.adapter
+        registerBluetoothStateReceiver()
         createNotificationChannel()
         promoteToForeground()
     }
@@ -208,6 +302,32 @@ class HidForegroundService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
+
+    private fun registerBluetoothStateReceiver() {
+        if (isReceiverRegistered) return
+        try {
+            val filter = IntentFilter().apply {
+                addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
+                addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(bluetoothReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                registerReceiver(bluetoothReceiver, filter)
+            }
+            isReceiverRegistered = true
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun unregisterBluetoothStateReceiver() {
+        if (!isReceiverRegistered) return
+        try {
+            unregisterReceiver(bluetoothReceiver)
+        } catch (_: Exception) {
+        }
+        isReceiverRegistered = false
+    }
 
     private fun promoteToForeground() {
         val notification = buildNotification()
@@ -299,6 +419,8 @@ class HidForegroundService : Service() {
             ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) ==
                 PackageManager.PERMISSION_GRANTED &&
                 ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADVERTISE) ==
+                PackageManager.PERMISSION_GRANTED &&
+                ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) ==
                 PackageManager.PERMISSION_GRANTED
         } else {
             ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
@@ -308,22 +430,135 @@ class HidForegroundService : Service() {
         }
     }
 
+    fun isBluetoothEnabled(): Boolean {
+        val adapter = bluetoothAdapter ?: (getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
+        bluetoothAdapter = adapter
+        return try {
+            adapter?.isEnabled == true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun registerHidAppIfNeeded() {
+        val service = hidDevice ?: return
+        if (!hasBluetoothPermissions() || !isBluetoothEnabled()) return
+
+        val now = SystemClock.elapsedRealtime()
+        synchronized(registrationLock) {
+            if (isAppRegistered) return
+            if (isRegisteringApp && (now - lastRegisterAttemptMs) < 4000L) {
+                return
+            }
+            isRegisteringApp = true
+            lastRegisterAttemptMs = now
+        }
+
+        try {
+            hidExecutor.execute {
+                try {
+                    val initiated = service.registerApp(
+                        sdpSettings,
+                        null,
+                        qosSettings,
+                        hidExecutor,
+                        hidCallback
+                    )
+                    if (!initiated) {
+                        // Limpiar posible registro zombie previo en la pila Bluetooth del fabricante y reintentar
+                        try {
+                            service.unregisterApp()
+                        } catch (_: Exception) {
+                        }
+                        synchronized(registrationLock) {
+                            isRegisteringApp = false
+                        }
+                        mainHandler.postDelayed({
+                            retryRegisterHidAppOnce()
+                        }, 500L)
+                    }
+                } catch (_: Exception) {
+                    synchronized(registrationLock) {
+                        isRegisteringApp = false
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            synchronized(registrationLock) {
+                isRegisteringApp = false
+            }
+        }
+    }
+
+    private fun retryRegisterHidAppOnce() {
+        val service = hidDevice ?: return
+        if (!hasBluetoothPermissions() || !isBluetoothEnabled() || isAppRegistered) return
+        synchronized(registrationLock) {
+            if (isRegisteringApp) return
+            isRegisteringApp = true
+            lastRegisterAttemptMs = SystemClock.elapsedRealtime()
+        }
+        try {
+            hidExecutor.execute {
+                try {
+                    val ok = service.registerApp(
+                        sdpSettings,
+                        null,
+                        qosSettings,
+                        hidExecutor,
+                        hidCallback
+                    )
+                    if (!ok) {
+                        synchronized(registrationLock) {
+                            isRegisteringApp = false
+                        }
+                    }
+                } catch (_: Exception) {
+                    synchronized(registrationLock) {
+                        isRegisteringApp = false
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            synchronized(registrationLock) {
+                isRegisteringApp = false
+            }
+        }
+    }
+
     fun ensureHidInitialized(): Map<String, Any?> {
         if (!hasBluetoothPermissions()) {
             return buildHidStatusMap(STATUS_NO_PERMISSION)
         }
-        val adapter = bluetoothAdapter ?: return buildHidStatusMap(STATUS_NOT_REGISTERED)
+        if (!isBluetoothEnabled()) {
+            return buildHidStatusMap(STATUS_BT_OFF)
+        }
+        val adapter = bluetoothAdapter ?: return buildHidStatusMap(STATUS_BT_OFF)
 
+        val now = SystemClock.elapsedRealtime()
         if (hidDevice == null) {
-            adapter.getProfileProxy(this, profileListener, BluetoothProfile.HID_DEVICE)
+            var shouldRequestProxy = false
+            synchronized(registrationLock) {
+                if (!isGettingProfileProxy || (now - lastProxyRequestMs) > 4000L) {
+                    isGettingProfileProxy = true
+                    lastProxyRequestMs = now
+                    shouldRequestProxy = true
+                }
+            }
+            if (shouldRequestProxy) {
+                val requested = try {
+                    adapter.getProfileProxy(applicationContext, profileListener, BluetoothProfile.HID_DEVICE)
+                } catch (_: Exception) {
+                    false
+                }
+                if (!requested) {
+                    synchronized(registrationLock) {
+                        isGettingProfileProxy = false
+                    }
+                }
+            }
         } else if (!isAppRegistered) {
-            hidDevice?.registerApp(
-                sdpSettings,
-                null,
-                qosSettings,
-                hidExecutor,
-                hidCallback
-            )
+            registerHidAppIfNeeded()
         } else if (resolveConnectedHost() == null) {
             autoConnectPairedDevice()
         }
@@ -333,7 +568,7 @@ class HidForegroundService : Service() {
     }
 
     fun resolveConnectedHost(): BluetoothDevice? {
-        if (!hasBluetoothPermissions()) return null
+        if (!hasBluetoothPermissions() || !isBluetoothEnabled()) return null
         val service = hidDevice ?: return null
 
         val cached = connectedHost
@@ -363,33 +598,67 @@ class HidForegroundService : Service() {
     }
 
     fun autoConnectPairedDevice() {
-        if (!hasBluetoothPermissions()) return
+        if (!hasBluetoothPermissions() || !isBluetoothEnabled()) return
         val service = hidDevice ?: return
         val adapter = bluetoothAdapter ?: return
 
         if (resolveConnectedHost() != null) return
 
-        val bonded = adapter.bondedDevices ?: return
+        val bonded = try {
+            adapter.bondedDevices
+        } catch (_: Exception) {
+            null
+        } ?: return
+
         val preferred = bonded.firstOrNull { device ->
             val name = (device.name ?: "").lowercase()
-            name.contains("x7") || name.contains("magcubic") || name.contains("projector") || name.contains("tv")
+            name.contains("x7") ||
+                name.contains("magcubic") ||
+                name.contains("projector") ||
+                name.contains("proyector") ||
+                name.contains("tv") ||
+                name.contains("pc") ||
+                name.contains("desktop") ||
+                name.contains("laptop")
+        } ?: bonded.firstOrNull { device ->
+            val major = try {
+                device.bluetoothClass?.majorDeviceClass
+            } catch (_: Exception) {
+                null
+            }
+            major == BluetoothClass.Device.Major.COMPUTER
         } ?: bonded.firstOrNull()
 
         if (preferred != null) {
             try {
-                service.connect(preferred)
+                val state = service.getConnectionState(preferred)
+                if (state == BluetoothProfile.STATE_DISCONNECTED) {
+                    service.connect(preferred)
+                }
             } catch (_: Exception) {
             }
         }
     }
 
     fun connectToBondedDevice(address: String?): Boolean {
-        if (!hasBluetoothPermissions() || address.isNullOrBlank()) return false
+        if (!hasBluetoothPermissions() || !isBluetoothEnabled() || address.isNullOrBlank()) return false
         val service = hidDevice ?: return false
-        val device = bluetoothAdapter?.bondedDevices?.firstOrNull { it.address == address }
-            ?: return false
+        val device = try {
+            bluetoothAdapter?.bondedDevices?.firstOrNull { it.address == address }
+        } catch (_: Exception) {
+            null
+        } ?: return false
+
         return try {
-            service.connect(device)
+            val currentState = service.getConnectionState(device)
+            if (currentState == BluetoothProfile.STATE_CONNECTED) {
+                connectedHost = device
+                updateForegroundNotification()
+                onStateChangedListener?.invoke()
+                true
+            } else {
+                service.connect(device)
+            }
         } catch (_: Exception) {
             false
         }
@@ -399,12 +668,37 @@ class HidForegroundService : Service() {
         if (!hasBluetoothPermissions()) {
             return STATUS_NO_PERMISSION
         }
+        if (!isBluetoothEnabled()) {
+            return STATUS_BT_OFF
+        }
         val service = hidDevice
         if (service == null || !isAppRegistered) {
             return STATUS_NOT_REGISTERED
         }
-        val host = connectedHost ?: resolveConnectedHost()
-            ?: return STATUS_NO_HOST
+
+        // Respaldo automatico: verificar connectedHost o consultar getDevicesMatchingConnectionStates
+        var host = connectedHost
+        val isHostValid = if (host != null) {
+            try {
+                service.getConnectionState(host) == BluetoothProfile.STATE_CONNECTED
+            } catch (_: Exception) {
+                false
+            }
+        } else {
+            false
+        }
+        if (!isHostValid) {
+            host = try {
+                service.getDevicesMatchingConnectionStates(
+                    intArrayOf(BluetoothProfile.STATE_CONNECTED)
+                )?.firstOrNull()
+            } catch (_: Exception) {
+                null
+            } ?: resolveConnectedHost()
+            connectedHost = host
+        }
+
+        val targetHost = host ?: return STATUS_NO_HOST
 
         val report = ByteArray(8)
         report[0] = 0x00
@@ -422,9 +716,23 @@ class HidForegroundService : Service() {
 
         return try {
             val future = hidExecutor.submit(Callable {
-                service.sendReport(host, KEYBOARD_REPORT_ID, report)
+                var ok = service.sendReport(targetHost, KEYBOARD_REPORT_ID, report)
+                if (!ok) {
+                    val refreshedHost = try {
+                        service.getDevicesMatchingConnectionStates(
+                            intArrayOf(BluetoothProfile.STATE_CONNECTED)
+                        )?.firstOrNull()
+                    } catch (_: Exception) {
+                        null
+                    }
+                    if (refreshedHost != null) {
+                        connectedHost = refreshedHost
+                        ok = service.sendReport(refreshedHost, KEYBOARD_REPORT_ID, report)
+                    }
+                }
+                ok
             })
-            val sent = future.get(150, TimeUnit.MILLISECONDS)
+            val sent = future.get(300, TimeUnit.MILLISECONDS)
             if (sent) STATUS_HID_OK else STATUS_SEND_FAILED
         } catch (_: Exception) {
             STATUS_SEND_FAILED
@@ -433,18 +741,27 @@ class HidForegroundService : Service() {
 
     fun currentDiagnosticStatus(): String {
         if (!hasBluetoothPermissions()) return STATUS_NO_PERMISSION
+        if (!isBluetoothEnabled()) return STATUS_BT_OFF
         if (hidDevice == null || !isAppRegistered) return STATUS_NOT_REGISTERED
         return if (resolveConnectedHost() != null) STATUS_HID_OK else STATUS_NO_HOST
     }
 
     fun getActiveHostName(): String? {
         val activeDevice = resolveConnectedHost() ?: return null
-        return activeDevice.name ?: activeDevice.address
+        return try {
+            activeDevice.name ?: activeDevice.address
+        } catch (_: Exception) {
+            activeDevice.address
+        }
     }
 
     fun getBondedDevicesList(): List<Map<String, String>> {
-        if (!hasBluetoothPermissions()) return emptyList()
-        val bonded = bluetoothAdapter?.bondedDevices ?: emptySet()
+        if (!hasBluetoothPermissions() || !isBluetoothEnabled()) return emptyList()
+        val bonded = try {
+            bluetoothAdapter?.bondedDevices
+        } catch (_: Exception) {
+            null
+        } ?: emptySet()
         return bonded.map { device ->
             mapOf(
                 "name" to (device.name ?: "Dispositivo BT"),
@@ -470,7 +787,7 @@ class HidForegroundService : Service() {
     }
 
     /**
-     * Cierra explicitamente la sesion Bluetooth HID cuando el usuario pulsa "Desconectar BT"
+     * Cierra explicitamente la sesion Bluetooth HID solo cuando el usuario pulsa "Desconectar BT"
      * o el boton "Desconectar" en la notificacion.
      */
     fun disconnectAndStop() {
@@ -497,9 +814,13 @@ class HidForegroundService : Service() {
             }
         } catch (_: Exception) {
         }
-        hidDevice = null
-        connectedHost = null
-        isAppRegistered = false
+        synchronized(registrationLock) {
+            hidDevice = null
+            connectedHost = null
+            isAppRegistered = false
+            isRegisteringApp = false
+            isGettingProfileProxy = false
+        }
         onStateChangedListener?.invoke()
 
         try {
@@ -515,6 +836,7 @@ class HidForegroundService : Service() {
     }
 
     override fun onDestroy() {
+        unregisterBluetoothStateReceiver()
         if (instance === this) {
             instance = null
         }

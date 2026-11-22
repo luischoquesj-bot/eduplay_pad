@@ -333,6 +333,7 @@ class _GamePadScreenState extends State<GamePadScreen>
 
   String? _connectedDeviceName;
   bool _isHidRegistered = false;
+  bool _userManuallyDisconnected = false;
   String _hidStatusCode = 'NOT_REGISTERED';
   List<Map<String, String>> _pairedDevices = [];
   Timer? _statusTimer;
@@ -442,10 +443,11 @@ class _GamePadScreenState extends State<GamePadScreen>
   }
 
   Future<void> _initializeBluetoothHid({bool makeDiscoverable = false}) async {
+    _userManuallyDisconnected = false;
     try {
       final granted =
           await _hidChannel.invokeMethod<bool>('requestPermissions') ?? false;
-      if (!granted && makeDiscoverable) {
+      if (!granted) {
         if (mounted) {
           setState(() {
             _hidStatusCode = 'NO_PERMISSION';
@@ -485,6 +487,7 @@ class _GamePadScreenState extends State<GamePadScreen>
 
   Future<void> _disconnectBluetoothHid() async {
     HapticFeedback.mediumImpact();
+    _userManuallyDisconnected = true;
     _clearAllInputs();
     try {
       await _hidChannel.invokeMethod('disconnectHid');
@@ -499,6 +502,26 @@ class _GamePadScreenState extends State<GamePadScreen>
 
   Future<void> _refreshConnectedDevice() async {
     try {
+      final res = await _hidChannel.invokeMapMethod<String, dynamic>(
+        'getHidStatus',
+        {'autoInit': !_userManuallyDisconnected},
+      );
+      if (!mounted) return;
+      if (res != null) {
+        final name = res['connectedDevice'] as String?;
+        final isReg = (res['isRegistered'] as bool?) ?? _isHidRegistered;
+        final code = (res['statusCode'] ?? res['state'])?.toString();
+        setState(() {
+          _connectedDeviceName = name;
+          _isHidRegistered = isReg;
+          if (code != null && code.isNotEmpty) {
+            if (_hidStatusCode != 'SEND_FAILED' || name == null) {
+              _hidStatusCode = code;
+            }
+          }
+        });
+        return;
+      }
       final name = await _hidChannel.invokeMethod<String>('getConnectedDevice');
       if (!mounted) return;
       setState(() {
@@ -1929,25 +1952,35 @@ class _GamePadScreenState extends State<GamePadScreen>
         const Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              'EduPlay Pad for EduPlays',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 9.5,
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF9E9E9E),
-                letterSpacing: 0.3,
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                'EduPlay Pad for EduPlays',
+                maxLines: 1,
+                softWrap: false,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF9E9E9E),
+                  letterSpacing: 0.3,
+                ),
               ),
             ),
             SizedBox(height: 1),
-            Text(
-              'Prof. Luis Choque — EduProjects BO',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 9.5,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF9E9E9E),
-                letterSpacing: 0.3,
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                'Prof. Luis Choque — EduProjects BO',
+                maxLines: 1,
+                softWrap: false,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF9E9E9E),
+                  letterSpacing: 0.3,
+                ),
               ),
             ),
           ],
